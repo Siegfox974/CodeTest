@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   hasFinnhubKey,
+  fetchQuote,
   fetchCandles,
   fetchCompanyNews,
   getMockCandles,
@@ -37,21 +38,36 @@ export async function GET(request) {
       const toDate = new Date().toISOString().split('T')[0];
       const fromDate = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
 
-      [candles, newsItems] = await Promise.all([
-        fetchCandles(symbol, sixMonthsAgo, now),
-        fetchCompanyNews(symbol, fromDate, toDate),
-      ]);
+      const quote = await fetchQuote(symbol);
 
-      const closes = candles.s === 'ok' ? candles.c : [];
-      const currentPrice = closes[closes.length - 1] || 0;
+      let candlesData = { s: 'no_data', c: [] };
+      try {
+        candlesData = await fetchCandles(symbol, sixMonthsAgo, now);
+      } catch {
+        // candles indisponibles, on utilise mock
+        candlesData = getMockCandles(symbol);
+      }
+
+      let fetchedNews = [];
+      try {
+        fetchedNews = await fetchCompanyNews(symbol, fromDate, toDate);
+      } catch {
+        fetchedNews = getMockNews([symbol]);
+      }
+
+      newsItems = fetchedNews;
+      candles = candlesData;
+
+      const closes = candles.s === 'ok' ? candles.c : (candles.c || []);
+      const currentPrice = quote.c || closes[closes.length - 1] || 0;
       const highs = candles.h || [];
       const lows = candles.l || [];
-      const high52 = highs.length ? Math.max(...highs) : 0;
-      const low52 = lows.length ? Math.min(...lows) : 0;
+      const high52 = highs.length ? Math.max(...highs) : quote.h || 0;
+      const low52 = lows.length ? Math.min(...lows) : quote.l || 0;
       baseInfo = { symbol, name: symbol, price: currentPrice, high52, low52 };
     }
 
-    const closes = candles.s === 'ok' ? candles.c : [];
+    const closes = (candles.s === 'ok' || candles.c?.length) ? (candles.c || []) : [];
     const currentPrice = baseInfo.price;
 
     const rsi = calculateRSI(closes, 14);

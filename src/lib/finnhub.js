@@ -102,7 +102,15 @@ const MOCK_NEWS_TEMPLATES = [
   { headline: 'Market volatility creates uncertainty for near-term outlook', sentiment: 'neutral' },
 ];
 
-const SOURCES = ['Reuters', 'Bloomberg', 'CNBC', 'MarketWatch', 'The Wall Street Journal', 'Financial Times', 'Barron\'s'];
+const SOURCES = [
+  { name: 'Reuters', url: 'https://www.reuters.com/markets/' },
+  { name: 'Bloomberg', url: 'https://www.bloomberg.com/markets' },
+  { name: 'CNBC', url: 'https://www.cnbc.com/markets/' },
+  { name: 'MarketWatch', url: 'https://www.marketwatch.com/' },
+  { name: 'The Wall Street Journal', url: 'https://www.wsj.com/market-data' },
+  { name: 'Financial Times', url: 'https://www.ft.com/markets' },
+  { name: "Barron's", url: 'https://www.barrons.com/market-data' },
+];
 
 export function getMockStocks(symbols) {
   return symbols.map((symbol) => {
@@ -137,14 +145,15 @@ export function getMockNews(symbols) {
     for (let i = 0; i < count; i++) {
       const template = MOCK_NEWS_TEMPLATES[Math.floor(Math.random() * MOCK_NEWS_TEMPLATES.length)];
       const stockData = MOCK_STOCKS[symbol];
+      const src = SOURCES[Math.floor(Math.random() * SOURCES.length)];
       news.push({
         id: `${symbol}-${i}-${now}`,
         symbol,
         headline: `${stockData ? stockData.name : symbol}: ${template.headline}`,
-        source: SOURCES[Math.floor(Math.random() * SOURCES.length)],
+        source: src.name,
         datetime: Math.floor((now - Math.random() * 7 * 86400000) / 1000),
         summary: `Investors and analysts are closely watching ${symbol} as the company navigates market conditions. This development could have significant implications for the stock's near-term performance and long-term valuation.`,
-        url: '#',
+        url: src.url,
         sentiment: template.sentiment,
       });
     }

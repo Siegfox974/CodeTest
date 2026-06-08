@@ -13,14 +13,10 @@ const sentimentConfig = {
 
 export default function NewsCard({ item }) {
   const s = sentimentConfig[item.sentiment] || sentimentConfig.neutral;
+  const hasUrl = item.url && item.url !== '#';
 
   return (
-    <a
-      href={item.url && item.url !== '#' ? item.url : undefined}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-indigo-500/50 hover:bg-gray-800/60 transition-all duration-200"
-    >
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 hover:border-indigo-500/50 hover:bg-gray-800/60 transition-all duration-200 flex flex-col">
       <div className="flex items-start justify-between gap-3 mb-2">
         <h3 className="text-white font-medium text-sm leading-snug line-clamp-2 flex-1">
           {item.headline}
@@ -34,15 +30,31 @@ export default function NewsCard({ item }) {
         <p className="text-gray-400 text-xs leading-relaxed line-clamp-2 mb-3">{item.summary}</p>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mt-auto pt-3 border-t border-gray-800">
         <div className="flex items-center gap-2">
           <span className="bg-indigo-600/20 text-indigo-400 text-xs font-medium px-2 py-0.5 rounded border border-indigo-500/30">
             {item.symbol}
           </span>
           <span className="text-gray-500 text-xs">{item.source}</span>
+          <span className="text-gray-600 text-xs">{formatDate(item.datetime)}</span>
         </div>
-        <span className="text-gray-600 text-xs">{formatDate(item.datetime)}</span>
+        {hasUrl ? (
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 font-medium transition-colors whitespace-nowrap"
+          >
+            Lire l'article
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        ) : (
+          <span className="text-xs text-gray-600 italic">Lien indisponible (mode démo)</span>
+        )}
       </div>
-    </a>
+    </div>
   );
 }

@@ -156,11 +156,23 @@ export default function SecteursPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Opportunités par Secteur</h1>
         <p className="text-gray-400 text-sm mt-2">
           Scanner d&apos;opportunités cross-sectoriel — score 0-100 basé sur la valorisation, le positionnement 52S et le consensus analystes.
         </p>
+      </div>
+
+      <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 mb-8">
+        <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+          <p className="text-amber-300 text-sm font-medium">Données et scores indicatifs</p>
+          <p className="text-amber-400/70 text-xs mt-0.5">
+            Les prix affichés sont mis à jour en temps réel via Finnhub lorsqu&apos;une clé API est configurée. Les scores d&apos;opportunité sont calculés algorithmiquement à partir de données historiques — ils ne constituent pas un conseil en investissement.
+          </p>
+        </div>
       </div>
 
       {topOpportunities.length > 0 && (

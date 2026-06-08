@@ -12,7 +12,7 @@ const INVESTORS = [
     badgeColor: 'bg-blue-600/20 text-blue-400 border-blue-600/30',
     initiales: 'NP',
     avatarColor: 'bg-blue-700',
-    description: 'Divulgation obligatoire sous le STOCK Act (2012) — transactions dans les 45 jours.',
+    description: 'Divulgation obligatoire sous le STOCK Act — transactions déclarées dans les 45 jours.',
   },
   {
     id: 'buffett',
@@ -46,6 +46,72 @@ const INVESTORS = [
     initiales: 'CW',
     avatarColor: 'bg-emerald-700',
     description: 'ARK Invest publie ses transactions quotidiennement — transparence totale unique dans le secteur.',
+  },
+  {
+    id: 'greene',
+    nom: 'Marjorie Taylor Greene',
+    titre: 'Représentante US, Géorgie',
+    fond: 'Portefeuille personnel',
+    badge: 'STOCK Act',
+    badgeColor: 'bg-blue-600/20 text-blue-400 border-blue-600/30',
+    initiales: 'MG',
+    avatarColor: 'bg-rose-800',
+    description: 'Divulgation obligatoire sous le STOCK Act — focus énergie, défense et tech.',
+  },
+  {
+    id: 'schultz',
+    nom: 'Debbie Wasserman Schultz',
+    titre: 'Représentante US, Floride',
+    fond: 'Portefeuille personnel',
+    badge: 'STOCK Act',
+    badgeColor: 'bg-blue-600/20 text-blue-400 border-blue-600/30',
+    initiales: 'DS',
+    avatarColor: 'bg-violet-700',
+    description: 'Divulgation obligatoire sous le STOCK Act — investissements diversifiés.',
+  },
+  {
+    id: 'gottheimer',
+    nom: 'Josh Gottheimer',
+    titre: 'Représentant US, New Jersey',
+    fond: 'Portefeuille personnel',
+    badge: 'STOCK Act',
+    badgeColor: 'bg-blue-600/20 text-blue-400 border-blue-600/30',
+    initiales: 'JG',
+    avatarColor: 'bg-teal-700',
+    description: 'Divulgation obligatoire sous le STOCK Act — profil tech et finance.',
+  },
+  {
+    id: 'crenshaw',
+    nom: 'Dan Crenshaw',
+    titre: 'Représentant US, Texas',
+    fond: 'Portefeuille personnel',
+    badge: 'STOCK Act',
+    badgeColor: 'bg-blue-600/20 text-blue-400 border-blue-600/30',
+    initiales: 'DC',
+    avatarColor: 'bg-slate-700',
+    description: 'Divulgation obligatoire sous le STOCK Act — fort penchant pour énergie et défense.',
+  },
+  {
+    id: 'aoc',
+    nom: 'Alexandria Ocasio-Cortez',
+    titre: 'Représentante US, New York',
+    fond: 'Portefeuille personnel',
+    badge: 'STOCK Act',
+    badgeColor: 'bg-blue-600/20 text-blue-400 border-blue-600/30',
+    initiales: 'AO',
+    avatarColor: 'bg-cyan-700',
+    description: 'Divulgation obligatoire sous le STOCK Act — portefeuille modeste et diversifié.',
+  },
+  {
+    id: 'khanna',
+    nom: 'Ro Khanna',
+    titre: 'Représentant US, Californie',
+    fond: 'Portefeuille personnel',
+    badge: 'STOCK Act',
+    badgeColor: 'bg-blue-600/20 text-blue-400 border-blue-600/30',
+    initiales: 'RK',
+    avatarColor: 'bg-indigo-700',
+    description: 'Divulgation obligatoire sous le STOCK Act — Silicon Valley, tech et semi-conducteurs.',
   },
 ];
 
@@ -149,7 +215,7 @@ export default function InvestisseursPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
         {INVESTORS.map((investor) => (
           <div
             key={investor.id}

@@ -153,7 +153,7 @@ export function getMockNews(symbols) {
         source: src.name,
         datetime: Math.floor((now - Math.random() * 7 * 86400000) / 1000),
         summary: `Investors and analysts are closely watching ${symbol} as the company navigates market conditions. This development could have significant implications for the stock's near-term performance and long-term valuation.`,
-        url: src.url,
+        url: null,
         sentiment: template.sentiment,
       });
     }

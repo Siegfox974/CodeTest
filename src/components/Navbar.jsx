@@ -12,6 +12,8 @@ export default function Navbar() {
     { href: '/', label: 'Dashboard' },
     { href: '/news', label: 'News' },
     { href: '/analyse', label: 'Analyse' },
+    { href: '/investisseurs', label: 'Investisseurs' },
+    { href: '/secteurs', label: 'Secteurs OP' },
   ];
 
   return (

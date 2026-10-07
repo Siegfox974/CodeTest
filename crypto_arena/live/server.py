@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .events import EventBus
-from .feed import DEFAULT_UNIVERSE, BinanceFeed, SimulatedFeed
+from .feed import DEFAULT_UNIVERSE, MultiExchangeFeed, SimulatedFeed
 from .notebook import Notebook
 from .room import Settings, TradingRoom
 
@@ -63,7 +63,7 @@ class App:
             if self.feed_factory:
                 feed = self.feed_factory(settings)
             elif body.get("market", "real") == "real":
-                feed = BinanceFeed(settings.universe)
+                feed = MultiExchangeFeed(settings.universe)
             else:
                 feed = SimulatedFeed(settings.universe, volatility=0.002)
             stamp = time.strftime("%Y%m%d-%H%M%S")

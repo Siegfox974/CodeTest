@@ -37,6 +37,8 @@ def main(argv: list[str] | None = None) -> None:
     salle.add_argument("--carnet", default="carnet/carnet.json", help="carnet de notes transmis d'une séance à l'autre")
     salle.add_argument("--no-browser", action="store_true")
 
+    sub.add_parser("marche", help="diagnostic : interroge chaque bourse en direct et affiche les prix de consensus")
+
     fetch = sub.add_parser("fetch", help="télécharger des clôtures Binance publiques en CSV")
     fetch.add_argument("--symbols", default="BTCUSDT,ETHUSDT,SOLUSDT,DOGEUSDT")
     fetch.add_argument("--interval", default="1h")
@@ -44,6 +46,9 @@ def main(argv: list[str] | None = None) -> None:
     fetch.add_argument("--out", default="data/binance.csv")
 
     args = parser.parse_args(argv)
+    if args.cmd == "marche":
+        diagnose_market()
+        return
     if args.cmd == "salle":
         from .live.server import serve
         serve(args.host, args.port, args.carnet, "runs", open_browser=not args.no_browser)
@@ -88,3 +93,30 @@ def print_summary(lineage, capital: float) -> None:
         print(f"Survivant final : {s.agent_id}, {s.final_value:.2f} USDT ({(s.final_value / capital - 1) * 100:+.2f} %).")
     else:
         print("Aucun agent n'a survécu jusqu'à la fin des données.")
+
+
+def diagnose_market() -> None:
+    from .live.feed import FeedError, MultiExchangeFeed
+    feed = MultiExchangeFeed()
+    try:
+        feed.refresh()
+    except FeedError as e:
+        print(f"Échec : {e}")
+    print("Bourses :")
+    for name, state in feed.status.items():
+        print(f"  {'✅' if state == 'ok' else '❌'} {name:<9} {'' if state == 'ok' else state}")
+    if not feed.prices:
+        return
+    print("\nPrix de consensus (médiane des bourses) :")
+    for sym, price in feed.prices.items():
+        venues = feed.quotes.get(sym, {})
+        detail = ", ".join(f"{n} {q.last:.6g}" for n, q in venues.items())
+        print(f"  {sym:<5} {price:>14.6g}   [{detail}]")
+    try:
+        source, rows = "?", feed.candles("BTC", "1h", 5)
+        source = feed.last_candle_source
+        print(f"\nBougies BTC 1h via {source} : " + ", ".join(f"{c['c']:.2f}" for c in rows))
+        name, book = feed.order_book("BTC", 5)
+        print(f"Carnet d'ordres BTC via {name} : meilleur achat {book['bids'][0][0]}, meilleure vente {book['asks'][0][0]}")
+    except FeedError as e:
+        print(f"Bougies / carnet indisponibles : {e}")

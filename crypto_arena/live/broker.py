@@ -42,7 +42,7 @@ class PaperBroker:
             return acc
 
     def prices(self) -> dict[str, float]:
-        return {s: self.feed.price(s) for s in self.feed.symbols}
+        return dict(self.feed.prices)
 
     def snapshot(self, owner: str) -> dict:
         with self.lock:

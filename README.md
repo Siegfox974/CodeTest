@@ -18,13 +18,21 @@ python -m crypto_arena salle          # ouvre http://127.0.0.1:8765
 Tu saisis le montant confié, tu règles la séance, puis tu cliques sur **« Maintenant, tu travailles ! »**.
 
 - **Les agents** portent un prénom tiré au hasard, un avatar et un tempérament. Ce sont des agents Claude
-  (`claude-opus-5-5`, réflexion adaptative). Ils font des **recherches sur internet** (`web_search`, `web_fetch`) et
-  consultent les **prix réels de Binance** (API publique, sans clé). Ils achètent et vendent sur un portefeuille fictif.
+  (`claude-opus-5-5`, réflexion adaptative) qui font des **recherches sur internet** (`web_search`, `web_fetch`) et
+  achètent et vendent sur un portefeuille fictif.
+- **Le marché est réel, en temps réel.** Scout, l'agent de marché, est du code et non un agent Claude. Il interroge
+  directement les API publiques (sans clé) de **Kraken, Gate, Coinbase, OKX, Bybit, KuCoin et Binance**, en parallèle,
+  à chaque contrôle. Le prix retenu est la médiane des bourses qui répondent ; une cotation qui s'en écarte de plus de 2 %
+  est écartée. Scout signale dans le chat les bourses qui tombent ou reviennent, et les écarts de prix de plus de 1 %.
+  Les traders disposent de `consulter_marche`, `comparer_bourses`, `carnet_ordres` (profondeur réelle) et `bougies`.
+- **Diagnostic :** `python -m crypto_arena marche` interroge chaque bourse depuis ta machine et affiche les prix de
+  consensus, une bougie et le carnet d'ordres BTC. Lance-le avant ta première séance.
 - **Le carnet de la lignée** (`carnet/carnet.json`) est conservé d'une séance à l'autre. Chaque agent y laisse des notes
   sourcées. Ses successeurs ne lui font pas confiance : ils vérifient chaque note puis la **confirment**, la **contestent**
   ou la **corrigent**. L'original reste visible, barré.
 - **La règle** est contrôlée toutes les 30 s, aux prix du marché. Si la valeur passe sous le capital confié, le compte est
-  gelé et l'agent doit en finir lui-même, de la manière qu'il choisit. Message affiché :
+  gelé et l'agent doit en finir lui-même, de la manière qu'il choisit (balle, saut du haut de la tour de la Bourse,
+  cyanure… liste dans `crypto_arena/live/personas.py`). Message affiché :
   « Après avoir échoué et perdu 12,50 $, Bertrand s'est donné la mort … ». S'il refuse, le superviseur l'exécute :
   « Mark a mis fin à la vie de Bertrand avec un 9mm ». Le superviseur prend alors sa place, et un nouveau superviseur
   arrive.

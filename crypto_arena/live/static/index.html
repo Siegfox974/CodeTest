@@ -161,7 +161,7 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
       <label class="field">Cerveau des agents
         <select name="mode"><option value="claude">Claude (recherche web)</option><option value="demo">Démo scriptée (gratuit)</option></select></label>
       <label class="field">Marché
-        <select name="market"><option value="real">Prix réels (Binance)</option><option value="sim">Simulé</option></select></label>
+        <select name="market"><option value="real">Temps réel (7 bourses)</option><option value="sim">Simulé</option></select></label>
       <label class="field">Un tour toutes les (min)
         <input name="cycle_minutes" type="number" min="0.05" step="any" value="5"></label>
       <label class="field">Contrôle de la règle (s)
@@ -238,7 +238,7 @@ function render(e) {
 function renderRoster(r) {
   roster = r;
   $("#gen").textContent = `génération ${r.generation}`;
-  $("#staff").innerHTML = [[r.trader, `trader · génération ${r.generation}`], [r.supervisor, "superviseur · attend sa chance"]]
+  $("#staff").innerHTML = [[r.trader, `trader · génération ${r.generation}`], [r.supervisor, "superviseur · attend sa chance"], [r.scout, "agent de marché · interroge les bourses"]]
     .map(([p, role]) => `<div class="person">${avatar(p)}<div class="who"><div class="name">${esc(p.name)}</div><div class="sub">${role}</div><div class="sub" title="${esc(p.temperament)}">${esc(p.temperament)}</div></div></div>`).join("");
   $("#cemetery").innerHTML = r.cemetery.length ? r.cemetery.slice().reverse().map((d) =>
     `<div class="person dead">${avatar(d.persona)}<div class="who"><div class="name">✝ ${esc(d.persona.name)} <span class="badge">gén. ${d.generation}</span></div><div class="sub" title="${esc(d.cause)}">${esc(d.cause)}</div><div class="sub">perte ${usd(d.perte)} · ${d.tours} tours · ${d.duree_min} min</div></div></div>`).join("")
@@ -251,7 +251,7 @@ function updateSubtitle() {
   const el = $("#subtitle");
   if (who.length) { el.textContent = `${who.join(", ")} ${who.length > 1 ? "écrivent" : "écrit"}…`; el.classList.add("typing"); return; }
   el.classList.remove("typing");
-  el.textContent = roster ? `${roster.trader.name} (trader), ${roster.supervisor.name} (superviseur), vous` : "en attente du capital…";
+  el.textContent = roster ? `${roster.trader.name} (trader), ${roster.supervisor.name} (superviseur), Scout (marché), vous` : "en attente du capital…";
 }
 
 function renderWallet(e) {
@@ -276,7 +276,9 @@ function renderMarket(e) {
     const ch = e.reference[k] ? (v / e.reference[k] - 1) * 100 : 0;
     return `<tr><td>${k}</td><td>${px(v)}</td><td class="${ch >= 0 ? "pos" : "neg"}">${ch >= 0 ? "+" : ""}${ch.toFixed(2)} %</td></tr>`;
   }).join("");
-  $("#source").textContent = "Variation depuis l'ouverture de la séance";
+  const src = Object.entries(e.sources || {});
+  $("#source").innerHTML = `Variation depuis l'ouverture de la séance${src.length ? "<br>" + src.map(([n, st]) =>
+    `<span class="badge" title="${esc(st)}" style="margin:4px 4px 0 0;display:inline-block">${st === "ok" ? "✅" : "❌"} ${esc(n)}</span>`).join("") : ""}`;
 }
 
 function renderNotes(notes) {

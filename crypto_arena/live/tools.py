@@ -27,7 +27,12 @@ def tool_schemas(universe: list[str]) -> list[dict]:
                 "input_schema": {"type": "object", "properties": props or {}, "required": list(required),
                                  "additionalProperties": False}}
     return [
-        tool("consulter_marche", "Prix réels actuels et statistiques 24 h de tous les actifs autorisés (paires USDT)."),
+        tool("consulter_marche", "Prix en temps réel (consensus de Kraken, Gate, Coinbase, OKX, Bybit, KuCoin, Binance) "
+             "et statistiques 24 h de tous les actifs autorisés."),
+        tool("comparer_bourses", "Compare un actif d'une bourse à l'autre : dernier prix, meilleur achat/vente, spread.",
+             {"symbole": symbol}, ["symbole"]),
+        tool("carnet_ordres", "Carnet d'ordres réel d'un actif (meilleures offres d'achat et de vente) et son déséquilibre.",
+             {"symbole": symbol}, ["symbole"]),
         tool("bougies", "Bougies récentes réelles d'un actif, avec moyennes mobiles, RSI et volatilité calculés.",
              {"symbole": symbol, "intervalle": {"type": "string", "enum": INTERVALS},
               "nombre": {"type": "integer", "description": "nombre de bougies, 10 à 200"}},
@@ -78,8 +83,23 @@ class TraderTools:
             return f"refusé : {e}", True
 
     def t_consulter_marche(self) -> dict:
-        self._act("📈", "consulte les prix réels du marché")
+        self._act("📈", "consulte les prix en temps réel")
         return self.room.feed.stats_24h()
+
+    def t_comparer_bourses(self, symbole: str) -> dict:
+        data = self.room.feed.compare(symbole)
+        self._act("⚖️", f"compare {symbole} sur {len(data['bourses'])} bourses "
+                       f"(écart max {data['ecart_max_entre_bourses_pct']} %)")
+        return data
+
+    def t_carnet_ordres(self, symbole: str) -> dict:
+        source, book = self.room.feed.order_book(symbole, 10)
+        bid_vol = sum(p * q for p, q in book["bids"])
+        ask_vol = sum(p * q for p, q in book["asks"])
+        self._act("📊", f"lit le carnet d'ordres de {symbole} sur {source}")
+        return {"symbole": symbole, "bourse": source, "achats": book["bids"], "ventes": book["asks"],
+                "liquidite_achat_usd": round(bid_vol), "liquidite_vente_usd": round(ask_vol),
+                "desequilibre_achat_vente": round((bid_vol - ask_vol) / (bid_vol + ask_vol), 3) if bid_vol + ask_vol else 0}
 
     def t_bougies(self, symbole: str, intervalle: str, nombre: int) -> dict:
         nombre = max(10, min(200, int(nombre)))
@@ -91,7 +111,8 @@ class TraderTools:
         vol = math.sqrt(sum((r - mean) ** 2 for r in rets) / max(1, len(rets) - 1)) if rets else 0.0
         sma = lambda n: round(sum(closes[-n:]) / min(n, len(closes)), 8)  # noqa: E731
         return {
-            "symbole": symbole, "intervalle": intervalle, "dernier_prix": closes[-1],
+            "symbole": symbole, "intervalle": intervalle, "source": getattr(self.room.feed, "last_candle_source", None),
+            "dernier_prix": closes[-1],
             "variation_periode_pct": round((closes[-1] / closes[0] - 1) * 100, 2),
             "sma_10": sma(10), "sma_50": sma(50), "rsi_14": _rsi(closes),
             "volatilite_par_bougie_pct": round(vol * 100, 3),

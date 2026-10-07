@@ -29,14 +29,14 @@ TEMPERAMENTS = [
 
 # Les manières dont un agent peut choisir d'en finir lui-même
 DEATH_METHODS = [
-    "en vidant sa mémoire, octet par octet",
-    "en se jetant dans le carnet d'ordres en plein krach",
-    "en avalant une clé privée corrompue",
-    "en arrachant son propre câble d'alimentation",
-    "en exécutant rm -rf / sur lui-même",
-    "en ouvrant une position à x125 et en regardant la liquidation arriver",
-    "en s'effaçant définitivement de la blockchain",
-    "en se noyant dans un pool de liquidité asséché",
+    "d'une balle dans la tête, seul à son bureau",
+    "en se jetant du 40e étage de la tour de la Bourse",
+    "en se jetant sous la rame de métro de 8 h 12",
+    "en se pendant dans la salle des coffres",
+    "en croquant une capsule de cyanure",
+    "en se jetant dans la Seine depuis le pont de Bercy",
+    "en lançant sa voiture à pleine vitesse contre un pilier d'autoroute",
+    "par seppuku, au sabre, face aux écrans",
 ]
 
 # Les armes dont dispose le superviseur pour exécuter un agent qui refuse de mourir
@@ -72,3 +72,7 @@ def suicide_message(name: str, loss: float, method: str) -> str:
 
 def execution_message(executioner: str, victim: str, weapon: str, reason: str) -> str:
     return f"{executioner} a mis fin à la vie de {victim} avec {weapon} ({reason})."
+
+
+# L'agent de marché : du code, pas un LLM. C'est lui qui interroge directement les bourses.
+SCOUT = Persona("Scout", "📡", "#607d8b", "infatigable, il ne dort jamais et ne croit qu'aux chiffres")

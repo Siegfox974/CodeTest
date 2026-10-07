@@ -13,7 +13,7 @@ from .claude_agents import DEFAULT_MODEL, ClaudeSupervisor, ClaudeTrader, CostMe
 from .events import EventBus
 from .feed import DEFAULT_UNIVERSE, FeedError
 from .notebook import Notebook
-from .personas import Persona, execution_message, money, random_persona, suicide_message
+from .personas import SCOUT, Persona, execution_message, money, random_persona, suicide_message
 from .scripted_agents import ScriptedSupervisor, ScriptedTrader
 from .tools import TraderTools
 
@@ -72,6 +72,8 @@ class TradingRoom:
         self._turn_thread: threading.Thread | None = None
         self._thread: threading.Thread | None = None
         self.started_prices: dict[str, float] = {}
+        self._scout_status: dict[str, str] | None = None
+        self._divergence_alerts: dict[str, float] = {}
 
     # ---------- personnages ----------
 
@@ -121,6 +123,7 @@ class TradingRoom:
 
     def publish_roster(self) -> None:
         self.bus.publish("roster", trader=self.trader.persona.to_dict(), supervisor=self.supervisor.persona.to_dict(),
+                         scout=SCOUT.to_dict(),
                          generation=self.generation, cemetery=self.cemetery,
                          settings={k: v for k, v in asdict(self.settings).items() if k != "seed"})
 
@@ -139,9 +142,11 @@ class TradingRoom:
         try:
             self.started_prices = self.feed.refresh()
         except FeedError as e:
+            self.scout_report()
             self.bus.system(f"Impossible d'accéder au marché : {e}", "error")
             self.bus.publish("stopped")
             return
+        self.scout_report()
         self.trader = self._seat_trader(random_persona(self.rng))
         self.supervisor = self._hire_supervisor()
         self.publish_roster()
@@ -153,10 +158,13 @@ class TradingRoom:
         while not self.stopping.is_set():
             try:
                 prices = self.feed.refresh()
-                self.bus.publish("market", prices=prices, reference=self.started_prices)
+                self.scout_report()
+                self.bus.publish("market", prices=prices, reference=self.started_prices,
+                                 sources=dict(getattr(self.feed, "status", {})))
                 self.check_rule()
                 self.publish_portfolio()
             except FeedError as e:
+                self.scout_report()
                 self.bus.system(f"Marché momentanément injoignable : {e}", "warn")
             busy = self._turn_thread is not None and self._turn_thread.is_alive()
             if not busy and (self.trader.condemned or time.time() >= self.next_turn_at):
@@ -166,6 +174,38 @@ class TradingRoom:
         if self._turn_thread:
             self._turn_thread.join(timeout=5)
         self.bus.publish("stopped")
+
+    def scout_report(self) -> None:
+        """L'agent de marché signale les bourses qui répondent, celles qui tombent, et les écarts de prix."""
+        say = lambda text: self.bus.say(SCOUT.to_dict(), text, "marché")  # noqa: E731
+        status = dict(getattr(self.feed, "status", {}))
+        if self._scout_status is None:
+            up = [n for n, st in status.items() if st == "ok"]
+            down = [f"{n} ({st})" for n, st in status.items() if st != "ok"]
+            say(f"Je surveille {len(status)} bourses en temps réel. ✅ {', '.join(up) or 'aucune'}"
+                + (f" — ❌ {'; '.join(down)}" if down else ""))
+        else:
+            for name, st in status.items():
+                before = self._scout_status.get(name)
+                if before == "ok" and st != "ok":
+                    say(f"❌ {name} ne répond plus ({st}). Je continue avec les autres.")
+                elif before is not None and before != "ok" and st == "ok":
+                    say(f"✅ {name} répond de nouveau.")
+        self._scout_status = status
+        if not hasattr(self.feed, "quotes"):
+            return
+        now = time.time()
+        for sym in list(self.feed.quotes):
+            try:
+                data = self.feed.compare(sym)
+            except FeedError:
+                continue
+            gap = data["ecart_max_entre_bourses_pct"]
+            if gap >= 1.0 and now - self._divergence_alerts.get(sym, 0) > 600:
+                self._divergence_alerts[sym] = now
+                worst = sorted(data["bourses"].items(), key=lambda kv: kv[1]["dernier"])
+                say(f"⚠️ {sym} : {gap:.2f} % d'écart entre {worst[0][0]} ({worst[0][1]['dernier']:.6g}) "
+                    f"et {worst[-1][0]} ({worst[-1][1]['dernier']:.6g}).")
 
     def check_rule(self) -> None:
         t = self.trader

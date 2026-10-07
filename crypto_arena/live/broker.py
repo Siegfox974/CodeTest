@@ -15,6 +15,7 @@ class Account:
     owner: str
     capital: float
     cash: float
+    threshold: float = 0.0          # seuil de mort : capital confié moins la perte tolérée
     holdings: dict[str, float] = field(default_factory=dict)
     frozen: str | None = None
     orders: int = 0
@@ -35,9 +36,9 @@ class PaperBroker:
         self.accounts: dict[str, Account] = {}
         self.lock = threading.RLock()
 
-    def open(self, owner: str, capital: float) -> Account:
+    def open(self, owner: str, capital: float, max_loss: float = 0.0) -> Account:
         with self.lock:
-            acc = Account(owner, capital, capital, peak=capital)
+            acc = Account(owner, capital, capital, threshold=capital - max_loss, peak=capital)
             self.accounts[owner] = acc
             return acc
 
@@ -57,7 +58,9 @@ class PaperBroker:
             return {
                 "capital_confie": acc.capital,
                 "valeur_totale": round(value, 2),
-                "marge_avant_la_mort": round(value - acc.capital, 2),
+                "perte_toleree": round(acc.capital - acc.threshold, 2),
+                "seuil_de_mort": round(acc.threshold, 2),
+                "marge_avant_la_mort": round(value - acc.threshold, 2),
                 "cash_usdt": round(acc.cash, 2),
                 "part_investie_pct": round(acc.exposure(prices) * 100, 1),
                 "positions": positions,

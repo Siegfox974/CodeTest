@@ -104,3 +104,43 @@ class ConsensusTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ApiConfigTest(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = Path(tmp.name) / "apis.json"
+
+    def test_custom_api_is_saved_tested_and_used(self):
+        from crypto_arena.live.config import ApiConfig
+        from crypto_arena.live.exchanges import extract
+        PAYLOADS["mexc.com/api/v3/ticker/price?symbol=BTCUSDT"] = {"symbol": "BTCUSDT", "price": "60015"}
+        self.addCleanup(PAYLOADS.pop, "mexc.com/api/v3/ticker/price?symbol=BTCUSDT")
+        cfg = ApiConfig(self.path)
+        cfg.update({"exchanges": {"KuCoin": False}, "anthropic_api_key": "sk-ant-test-1234",
+                    "custom": [{"name": "MEXC", "url": "https://api.mexc.com/api/v3/ticker/price?symbol={symbol}"}]})
+        cfg = ApiConfig(self.path)  # relue depuis le disque
+        self.assertFalse(cfg.enabled["KuCoin"])
+        self.assertEqual(cfg.public()["anthropic"]["hint"], "…1234")
+        self.assertNotIn("sk-ant-test-1234", str(cfg.public()))
+        fake_claude = type("C", (), {"models": type("M", (), {"retrieve": lambda self, m: type("I", (), {"display_name": "Claude"})()})()})()
+        result = cfg.test(get=fake_get, symbols=("BTC",), anthropic_client=fake_claude)
+        by_name = {r["name"]: r for r in result["sources"]}
+        self.assertTrue(by_name["MEXC"]["ok"])
+        self.assertEqual(by_name["MEXC"]["prices"]["BTC"], 60015.0)
+        self.assertNotIn("KuCoin", by_name)
+        self.assertTrue(result["anthropic"]["ok"])
+        names = [e.name for e in cfg.exchanges(only=["MEXC", "Gate"], get=fake_get)]
+        self.assertEqual(names, ["Gate", "MEXC"])
+        self.assertEqual(extract({"result": {"XXBTZUSD": {"c": ["1.5", "2"]}}}, "result.*.c.0"), "1.5")
+
+    def test_invalid_custom_api_is_refused(self):
+        from crypto_arena.live.config import ApiConfig
+        cfg = ApiConfig(self.path)
+        with self.assertRaises(ValueError):
+            cfg.update({"custom": [{"name": "X", "url": "https://exemple.com/prix"}]})  # pas de {symbol}
+        with self.assertRaises(ValueError):
+            cfg.update({"custom": [{"name": "Gate", "url": "https://x.com/{symbol}"}]})  # nom déjà pris

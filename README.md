@@ -15,7 +15,22 @@ export ANTHROPIC_API_KEY=...          # sans clé, seul le mode démo est propos
 python -m crypto_arena salle          # ouvre http://127.0.0.1:8765
 ```
 
-Tu saisis le montant confié, tu règles la séance, puis tu cliques sur **« Maintenant, tu travailles ! »**.
+Tu saisis le montant confié, la **perte maximale tolérée** (0 = le moindre centime perdu est fatal, ou 0,10, 0,50,
+1, 2, 5 USDT…) et la **durée de la séance** (30 min, 1 h, 2 h, 1 jour, 2 jours, 7 jours, illimitée ou personnalisée).
+Puis tu cliques sur **« Maintenant, tu travailles ! »**. À la fin du temps imparti, la séance s'arrête et le
+trader encore en poste survit. Un bilan s'affiche, et un compte à rebours est visible pendant toute la séance.
+
+**Menu 🔌 API** (bouton dans la barre latérale et dans le formulaire de départ) :
+- activer ou désactiver chaque bourse intégrée ;
+- **ajouter ta propre API** : nom, URL contenant `{symbol}`, format du symbole (`{SYM}USDT`, `{SYM}_USDT`, `{sym}`…),
+  chemin du prix dans la réponse JSON (`price`, `data.0.last`, `result.*.c.0`) et un en-tête optionnel pour une clé ;
+- enregistrer la **clé Anthropic** sans passer par une variable d'environnement ;
+- **⚡ Tester tout** : chaque source est interrogée en parallèle (latence, prix du BTC ou raison de l'échec) et la clé
+  Anthropic est vérifiée. Le test se lance aussi tout seul à l'ouverture. Seules les sources qui fonctionnent sont
+  utilisées pour la séance.
+
+La configuration est enregistrée dans `config/apis.json`, lisible par toi seul (permissions 600). Elle n'est pas
+versionnée dans git, et le serveur n'écoute que sur ta machine (127.0.0.1).
 
 - **Les agents** portent un prénom tiré au hasard, un avatar et un tempérament. Ce sont des agents Claude
   (`claude-opus-5-5`, réflexion adaptative) qui font des **recherches sur internet** (`web_search`, `web_fetch`) et

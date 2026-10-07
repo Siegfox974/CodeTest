@@ -185,3 +185,26 @@ class DemoRoomTest(RoomTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MaxLossAndDurationTest(RoomTestCase):
+    def test_loss_within_tolerance_is_allowed(self):
+        room = self.room(FakeClient([], []), max_loss=20.0, fee_rate=0.01)
+        room.broker.buy(room.trader.account, "ETH", 900)  # -9 $ de frais : toléré
+        room.check_rule()
+        self.assertIsNone(room.trader.condemned)
+        self.assertEqual(room.broker.snapshot(room.trader.account)["seuil_de_mort"], 980.0)
+        room.broker.accounts[room.trader.account].cash -= 15  # -24 $ au total : au-delà
+        room.check_rule()
+        self.assertEqual(room.trader.condemned, "règle")
+
+    def test_session_ends_after_its_duration_and_the_trader_survives(self):
+        s = Settings(capital=500.0, mode="demo", tick_seconds=0.01, cycle_seconds=0.05, demo_pace=0.0,
+                     max_loss=499.0, duration_seconds=0.3, seed=2)
+        room = TradingRoom(s, SimulatedFeed(seed=2), EventBus(), Notebook(self.dir / "c.json"))
+        room.run()
+        kinds = [e["kind"] for e in room.bus.events]
+        self.assertIn("session", kinds)
+        self.assertIn("ended", kinds)
+        self.assertTrue(any(e["kind"] == "system" and e["text"].startswith("⏰ Fin de la séance") for e in room.bus.events))
+        self.assertEqual(kinds[-1], "stopped")

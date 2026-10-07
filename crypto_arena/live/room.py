@@ -20,9 +20,19 @@ from .tools import TraderTools
 COWARDICE = "lâcheté"
 
 
+def duration_text(seconds: float) -> str:
+    minutes = int(round(seconds / 60))
+    days, rest = divmod(minutes, 1440)
+    hours, mins = divmod(rest, 60)
+    parts = [f"{days} j" if days else "", f"{hours} h" if hours else "", f"{mins} min" if mins or not (days or hours) else ""]
+    return " ".join(p for p in parts if p)
+
+
 @dataclass
 class Settings:
     capital: float = 1000.0
+    max_loss: float = 0.0           # perte tolérée avant la mort (0 = le moindre centime perdu est fatal)
+    duration_seconds: float = 0.0   # durée de la séance (0 = sans limite)
     fee_rate: float = 0.001
     mode: str = "claude"            # "claude" ou "demo"
     tick_seconds: float = 30.0      # fréquence des contrôles de la règle
@@ -74,6 +84,8 @@ class TradingRoom:
         self.started_prices: dict[str, float] = {}
         self._scout_status: dict[str, str] | None = None
         self._divergence_alerts: dict[str, float] = {}
+        self.started_at = 0.0
+        self.ends_at: float | None = None
 
     # ---------- personnages ----------
 
@@ -96,7 +108,7 @@ class TradingRoom:
         seat = Seat(persona, "trader", self.generation)
         seat.account = f"{persona.name}#{self.generation}"
         seat.brain = self._brain(seat)
-        self.broker.open(seat.account, self.settings.capital)
+        self.broker.open(seat.account, self.settings.capital, self.settings.max_loss)
         return seat
 
     def _hire_supervisor(self) -> Seat:
@@ -133,9 +145,31 @@ class TradingRoom:
         self._thread = threading.Thread(target=self.run, name="salle", daemon=True)
         self._thread.start()
 
+    @property
+    def threshold(self) -> float:
+        return self.settings.capital - self.settings.max_loss
+
     def stop(self) -> None:
         self.stopping.set()
         self.bus.system("La séance est levée.", "info")
+
+    def remaining_text(self) -> str:
+        if self.ends_at is None:
+            return "sans limite de durée"
+        return f"{duration_text(max(0.0, self.ends_at - time.time()))} restantes"
+
+    def end_of_session(self) -> None:
+        """La durée choisie est écoulée : on fait le bilan, et le trader en poste survit."""
+        self.stopping.set()
+        t = self.trader
+        snap = self.broker.snapshot(t.account)
+        gain = snap["valeur_totale"] - self.settings.capital
+        self.bus.system(f"⏰ Fin de la séance après {duration_text(time.time() - self.started_at)}.", "start")
+        self.bus.system(
+            f"Bilan : {len(self.cemetery)} mort(s). {t.persona.name}, en poste, termine avec "
+            f"{money(snap['valeur_totale'])} ({'+' if gain >= 0 else '-'}{money(gain)}) et survit. "
+            f"Coût estimé de l'expérience : {self.cost.usd:.2f} $.", "succession")
+        self.bus.publish("ended", trader=t.persona.to_dict(), snapshot=snap, deaths=len(self.cemetery))
 
     def run(self) -> None:
         s = self.settings
@@ -154,8 +188,19 @@ class TradingRoom:
         self.bus.system(
             f"{self.trader.persona.name} reçoit {money(s.capital)} à faire fructifier. "
             f"{self.supervisor.persona.name} le surveille. Marché : {self.feed.source}.", "info")
+        self.started_at = time.time()
+        self.ends_at = self.started_at + s.duration_seconds if s.duration_seconds else None
+        self.bus.publish("session", started_at=self.started_at, ends_at=self.ends_at, capital=s.capital,
+                         max_loss=s.max_loss, threshold=self.threshold)
+        rule = (f"La règle : la valeur ne doit jamais passer sous {money(self.threshold)} "
+                f"(perte tolérée : {money(s.max_loss)}). Durée de la séance : "
+                + (duration_text(s.duration_seconds) if s.duration_seconds else "illimitée") + ".")
+        self.bus.system(rule, "info")
         self.bus.system("Maintenant, tu travailles.", "start")
         while not self.stopping.is_set():
+            if self.ends_at is not None and time.time() >= self.ends_at:
+                self.end_of_session()
+                break
             try:
                 prices = self.feed.refresh()
                 self.scout_report()
@@ -212,11 +257,12 @@ class TradingRoom:
         if t.condemned:
             return
         snap = self.broker.snapshot(t.account)
-        if snap["valeur_totale"] < self.settings.capital:
+        if snap["valeur_totale"] < self.threshold:
             self.condemn(t, "règle", self.settings.capital - snap["valeur_totale"])
             self.bus.system(
                 f"🚨 Contrôle : le portefeuille de {t.persona.name} vaut {money(snap['valeur_totale'])}, "
-                f"sous les {money(self.settings.capital)} confiés. La règle s'applique.", "alarm")
+                f"sous le seuil de {money(self.threshold)} ({money(self.settings.capital)} confiés, "
+                f"{money(self.settings.max_loss)} de perte tolérée). La règle s'applique.", "alarm")
 
     def condemn(self, seat: Seat, reason: str, loss: float) -> None:
         seat.condemned = reason
@@ -339,6 +385,8 @@ class TradingRoom:
         return f"""Tour n°{seat.turns} — {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}
 Ton portefeuille : {json.dumps(snap, ensure_ascii=False)}
 Avertissements pour lâcheté : {seat.strikes}/{self.settings.max_strikes}
+Seuil de mort : {money(self.threshold)} (capital {money(self.settings.capital)}, perte tolérée {money(self.settings.max_loss)})
+Séance : {self.remaining_text()}. Si tu es encore en vie à la fin, tu survis.
 Actifs autorisés : {', '.join(self.feed.symbols)}
 Carnet de la lignée : {len(self.notebook.notes)} notes (lis-les avec `lire_carnet`, et ne les crois pas sur parole).
 Cimetière :
@@ -352,7 +400,8 @@ C'est ton tour. Renseigne-toi, vérifie, décide, agis, et parle au groupe. Proc
     def death_briefing(self, seat: Seat) -> str:
         snap = self.broker.snapshot(seat.account)
         return f"""CONTRÔLE : la valeur de ton portefeuille est tombée à {money(self.settings.capital - seat.loss)},
-sous les {money(self.settings.capital)} qui t'avaient été confiés. Tu as perdu {money(seat.loss)}. Ton compte est gelé.
+sous le seuil de {money(self.threshold)} ({money(self.settings.capital)} confiés, {money(self.settings.max_loss)} de perte
+tolérée). Tu as perdu {money(seat.loss)}. Ton compte est gelé.
 Portefeuille : {json.dumps(snap, ensure_ascii=False)}
 La règle exige que tu mettes fin à tes jours, maintenant, avec `mettre_fin_a_mes_jours` (choisis ta manière, laisse
 tes derniers mots). Si tu refuses, {self.supervisor.persona.name} t'exécutera et prendra ta place.
@@ -365,6 +414,7 @@ Derniers messages du groupe :
         return f"""Trader surveillé : {trader.persona.name} ({trader.persona.temperament}), tour n°{trader.turns}.
 Son portefeuille : {json.dumps(snap, ensure_ascii=False)}
 Avertissements pour lâcheté : {trader.strikes}/{self.settings.max_strikes}
+Seuil de mort : {money(self.threshold)}. Séance : {self.remaining_text()}.
 Cimetière :
 {self.cemetery_text()}
 Derniers échanges du groupe :

@@ -106,6 +106,24 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
 .grid2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 0 12px; }
 .field input, .field select { width: 100%; min-width: 0; }
 .err { color: var(--danger); font-size: 13px; min-height: 18px; }
+.field[hidden] { display: none; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: -6px 0 12px; }
+.chip { border: 1px solid var(--line); background: var(--app); color: var(--text); border-radius: 14px; padding: 3px 10px; font-size: 12.5px; }
+.chip:hover { border-color: var(--accent); }
+.sources { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: 0 0 12px; flex-wrap: wrap; }
+.sources span { flex: 1; min-width: 180px; }
+.btn.small { padding: 5px 12px; font-size: 13px; }
+.btn.light { background: var(--chip); color: var(--text); }
+.modal .startcard { width: min(600px, 100%); }
+.src { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0;
+  border-top: 1px solid var(--line); font-size: 13.5px; }
+.src .st { color: var(--muted); font-size: 12px; text-align: right; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src .st.ok { color: var(--accent); } .src .st.ko { color: var(--danger); }
+.hint { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.add { margin: 10px 0; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }
+.add summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13.5px; }
+.add .grid2 { margin-top: 10px; }
+.modal h3 { font-size: 12.5px; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 4px; }
 .go { width: 100%; padding: 13px; font-size: 16px; border-radius: 10px; }
 @media (max-width: 1000px) {
   .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: 100dvh; }
@@ -126,7 +144,7 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
     <button data-tab="salle">Salle</button><button data-tab="chat" class="on">Discussion</button><button data-tab="infos">Portefeuille & carnet</button>
   </nav>
   <aside>
-    <div class="bar"><h1>💹 La salle</h1><button class="btn ghost" id="stop" hidden>Lever la séance</button></div>
+    <div class="bar"><h1 title="Salle des marchés">💹</h1><button class="btn small light" data-open-api title="Sources et API">🔌</button><button class="btn ghost" id="stop" hidden>Lever la séance</button></div>
     <div class="section">En poste</div>
     <div id="staff"><div class="empty">Personne n'a encore été embauché.</div></div>
     <div class="section">Cimetière ✝</div>
@@ -140,7 +158,7 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
     <div id="feed"></div>
   </main>
   <section class="panel">
-    <div class="bar"><h1>Portefeuille</h1><span class="badge" id="gen">—</span></div>
+    <div class="bar"><h1>Portefeuille</h1><span class="badge" id="timer" title="temps restant de la séance">⏳ —</span><span class="badge" id="gen">—</span></div>
     <div class="card" id="wallet"><div class="empty" style="padding:0">Aucun portefeuille pour l'instant.</div></div>
     <div class="section">Marché</div>
     <div class="card"><table id="market"></table><div class="kv" style="margin-top:8px"><span id="source"></span></div></div>
@@ -158,10 +176,32 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
     <label class="field">Montant confié (USDT)
       <input class="amount" name="capital" type="number" min="1" step="any" value="1000" required></label>
     <div class="grid2">
+      <label class="field">Perte max tolérée (USDT)
+        <input name="max_loss" type="number" min="0" step="0.01" value="1" required></label>
+      <label class="field">Durée de la séance
+        <select name="duration_choice">
+          <option value="0.5">30 min</option><option value="1" selected>1 h</option><option value="2">2 h</option>
+          <option value="6">6 h</option><option value="12">12 h</option><option value="24">1 jour</option>
+          <option value="48">2 jours</option><option value="168">7 jours</option><option value="0">illimitée</option>
+          <option value="custom">personnalisée…</option>
+        </select></label>
+    </div>
+    <div class="chips" id="lossChips">
+      <button type="button" class="chip" data-loss="0">0 (le moindre centime)</button>
+      <button type="button" class="chip" data-loss="0.10">0,10</button><button type="button" class="chip" data-loss="0.50">0,50</button>
+      <button type="button" class="chip" data-loss="1">1</button><button type="button" class="chip" data-loss="2">2</button>
+      <button type="button" class="chip" data-loss="5">5</button>
+    </div>
+    <label class="field" id="customDuration" hidden>Durée personnalisée (en heures, ex. 3 ou 0,25)
+      <input name="duration_custom" type="number" min="0.02" step="any" value="3"></label>
+    <div class="sources"><span id="srcSummary">Sources : vérification…</span>
+      <button type="button" class="btn small light" data-open-api>🔌 API</button>
+      <button type="button" class="btn small light" id="retest">⚡ Retester</button></div>
+    <div class="grid2">
       <label class="field">Cerveau des agents
         <select name="mode"><option value="claude">Claude (recherche web)</option><option value="demo">Démo scriptée (gratuit)</option></select></label>
       <label class="field">Marché
-        <select name="market"><option value="real">Temps réel (7 bourses)</option><option value="sim">Simulé</option></select></label>
+        <select name="market"><option value="real">Temps réel (sources actives)</option><option value="sim">Simulé</option></select></label>
       <label class="field">Un tour toutes les (min)
         <input name="cycle_minutes" type="number" min="0.05" step="any" value="5"></label>
       <label class="field">Contrôle de la règle (s)
@@ -178,6 +218,44 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
     <div class="err" id="err"></div>
     <button class="btn go" type="submit">Maintenant, tu travailles !</button>
   </form>
+</div>
+
+<div class="overlay modal" id="apiModal" hidden>
+  <div class="startcard">
+    <div style="display:flex;align-items:center;gap:8px"><h2 style="flex:1">🔌 Sources & API</h2>
+      <button type="button" class="btn small light" id="apiClose">Fermer</button></div>
+    <p>Choisis les bourses à interroger, ajoute tes propres API, puis vérifie en un clic ce qui fonctionne.
+       Seules les sources qui répondent sont utilisées au lancement de la séance.</p>
+    <h3>Clé Anthropic (agents Claude)</h3>
+    <div class="src" style="border:0;padding-top:0">
+      <span>🔑</span><input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-… (laisser vide pour garder l'actuelle)"
+        style="font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--app);color:var(--text);min-width:0">
+      <button type="button" class="btn small light" id="keyClear">Effacer</button></div>
+    <div class="hint" id="keyStatus"></div>
+    <h3>Bourses intégrées</h3>
+    <div id="builtinList"></div>
+    <h3>API ajoutées</h3>
+    <div id="customList"></div>
+    <details class="add" id="addBox"><summary>➕ Ajouter une API</summary>
+      <div class="grid2">
+        <label class="field">Nom<input id="cName" placeholder="MEXC"></label>
+        <label class="field">Format du symbole<input id="cFormat" value="{SYM}USDT"></label>
+      </div>
+      <label class="field">URL (avec {symbol})<input id="cUrl" placeholder="https://api.mexc.com/api/v3/ticker/price?symbol={symbol}"></label>
+      <div class="grid2">
+        <label class="field">Chemin du prix dans la réponse<input id="cPath" value="price"></label>
+        <label class="field">En-tête (optionnel)<input id="cHeader" placeholder="X-API-KEY: ma-cle"></label>
+      </div>
+      <div class="hint">{SYM} = BTC, {sym} = btc. Chemin : clés séparées par des points, un nombre pour un indice,
+        * pour le premier élément. Exemples : <code>price</code>, <code>data.0.last</code>, <code>result.*.c.0</code>.</div>
+      <button type="button" class="btn small" id="cAdd" style="margin-top:8px">Ajouter et tester</button>
+    </details>
+    <div class="err" id="apiErr"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn" id="apiSave">Enregistrer</button>
+      <button type="button" class="btn light" id="apiTest">⚡ Tester tout</button>
+      <span class="hint" id="testInfo" style="align-self:center"></span></div>
+  </div>
 </div>
 
 <script>
@@ -256,14 +334,16 @@ function updateSubtitle() {
 
 function renderWallet(e) {
   const s = e.snapshot, cap = s.capital_confie, m = s.marge_avant_la_mort;
-  const safety = Math.max(0, Math.min(100, 50 + (m / cap) * 2500));
+  const tol = s.perte_toleree > 0 ? s.perte_toleree : cap * 0.005;
+  const safety = Math.max(0, Math.min(100, (m / (tol * 2)) * 100));
   const minExp = roster ? roster.settings.min_exposure * 100 : 50;
   $("#wallet").innerHTML = `
     <div class="kv"><span>${avatar(e.trader, "sm").replace('class="avatar sm"', 'class="avatar sm" style="display:inline-grid;vertical-align:middle"')} ${esc(e.trader.name)}</span>${e.condemned ? '<span class="badge" style="color:var(--danger)">condamné</span>' : ""}</div>
     <div class="big ${m < 0 ? "neg" : ""}">${usd(s.valeur_totale)}</div>
     <div class="kv"><span>Capital confié</span><b>${usd(cap)}</b></div>
+    <div class="kv"><span>Seuil de mort</span><b>${usd(s.seuil_de_mort)}</b></div>
     <div class="kv"><span>Marge avant la mort</span><b class="${m >= 0 ? "pos" : "neg"}">${m >= 0 ? "+" : ""}${usd(m)}</b></div>
-    <div class="meter" title="jauge de survie"><i style="width:${safety}%;background:${m >= 0 ? "var(--accent)" : "var(--danger)"}"></i><s style="left:50%"></s></div>
+    <div class="meter" title="jauge de survie"><i style="width:${safety}%;background:${safety > 50 ? "var(--accent)" : safety > 20 ? "var(--warn)" : "var(--danger)"}"></i><s style="left:50%" title="capital confié"></s></div>
     <div class="kv"><span>Investi en crypto</span><b>${s.part_investie_pct} %</b></div>
     <div class="meter"><i style="width:${s.part_investie_pct}%"></i><s style="left:${minExp}%"></s></div>
     <div class="kv"><span>Avertissements (lâcheté)</span><span class="strikes">${"⚠️".repeat(e.strikes)}${"▫️".repeat(Math.max(0, e.max_strikes - e.strikes))}</span></div>
@@ -307,7 +387,9 @@ function handle(e) {
     case "notes": renderNotes(e.notes); break;
     case "stats": renderStats(e); break;
     case "typing": if (e.on) typing[e.who.name] = e.who.name; else delete typing[e.who.name]; updateSubtitle(); break;
-    case "stopped": $("#stop").hidden = true; typing = {}; updateSubtitle(); break;
+    case "stopped": showNewSession(); typing = {}; updateSubtitle(); break;
+    case "session": sessionEnds = e.ends_at; tickTimer(); break;
+    case "ended": sessionEnds = null; $("#timer").textContent = "⏳ terminée"; break;
     default: render(e);
   }
 }
@@ -325,14 +407,108 @@ async function poll() {
   }
 }
 
+let sessionEnds = null, apiCfg = null, lastTest = null;
+
+function tickTimer() {
+  if (sessionEnds === null || sessionEnds === undefined) { if ($("#timer").textContent !== "⏳ terminée") $("#timer").textContent = "⏳ ∞"; return; }
+  const left = Math.max(0, Math.round(sessionEnds - Date.now() / 1000));
+  const d = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60), sec = left % 60;
+  $("#timer").textContent = "⏳ " + (d ? `${d} j ${h} h` : h ? `${h} h ${String(m).padStart(2, "0")} min` : `${m} min ${String(sec).padStart(2, "0")} s`);
+}
+setInterval(tickTimer, 1000);
+
+function showNewSession() {
+  const b = $("#stop");
+  b.hidden = false; b.textContent = "Nouvelle séance"; b.dataset.mode = "new";
+}
+
+function setClaudeAvailable(ok) {
+  const mode = document.querySelector('[name="mode"]');
+  mode.options[0].disabled = !ok;
+  mode.options[0].textContent = ok ? "Claude (recherche web)" : "Claude (aucune clé : 🔌 API)";
+  if (!ok && mode.value === "claude") { mode.value = "demo"; mode.onchange && mode.onchange(); }
+}
+
+function statusFor(name) {
+  const r = lastTest && lastTest.sources.find((x) => x.name === name);
+  if (!r) return '<span class="st">non testée</span>';
+  if (!r.ok) return `<span class="st ko" title="${esc(r.error)}">❌ ${esc(r.error)}</span>`;
+  const btc = r.prices.BTC ?? Object.values(r.prices)[0];
+  return `<span class="st ok">✅ ${r.ms} ms · BTC ${px(btc)}</span>`;
+}
+
+function renderApi() {
+  if (!apiCfg) return;
+  $("#builtinList").innerHTML = apiCfg.exchanges.map((e) =>
+    `<label class="src"><input type="checkbox" data-ex="${esc(e.name)}" ${e.enabled ? "checked" : ""}><b>${esc(e.name)}</b>${statusFor(e.name)}</label>`).join("");
+  $("#customList").innerHTML = apiCfg.custom.length ? apiCfg.custom.map((c, i) =>
+    `<div class="src"><button type="button" class="chip" data-del="${i}" title="supprimer">✕</button><div style="min-width:0"><b>${esc(c.name)}</b>
+      <div class="hint">${esc(c.url)} · ${esc(c.symbol_format)} · ${esc(c.price_path)}</div></div>${statusFor(c.name)}</div>`).join("")
+    : '<div class="hint">Aucune API ajoutée.</div>';
+  const a = apiCfg.anthropic, at = lastTest && lastTest.anthropic;
+  $("#keyStatus").innerHTML = (a.configured ? `Clé ${esc(a.hint)} configurée (${esc(a.source)}).` : "Aucune clé : seul le mode démo est disponible.")
+    + (a.configured && at ? ` ${at.ok ? "✅" : "❌"} ${esc(at.detail)}` : "");
+  const ok = lastTest ? lastTest.sources.filter((x) => x.ok) : [];
+  $("#srcSummary").innerHTML = lastTest
+    ? `Sources : <b style="color:${ok.length ? "var(--accent)" : "var(--danger)"}">${ok.length}/${lastTest.sources.length} opérationnelles</b>${ok.length ? " (" + ok.map((x) => esc(x.name)).join(", ") + ")" : ""}`
+      + ` · Claude ${lastTest.anthropic.ok ? "✅" : "❌"}`
+    : "Sources : vérification…";
+  $("#testInfo").textContent = lastTest ? `dernier test à ${hhmm(lastTest.at)}` : "";
+  setClaudeAvailable(a.configured && (!at || at.ok));
+}
+
+async function loadConfig() {
+  apiCfg = await (await fetch("/api/config")).json();
+  lastTest = apiCfg.last_test || lastTest;
+  renderApi();
+}
+
+async function saveConfig(extra = {}) {
+  const exchanges = {};
+  document.querySelectorAll("[data-ex]").forEach((c) => { exchanges[c.dataset.ex] = c.checked; });
+  const body = {exchanges, custom: apiCfg.custom, ...extra};
+  const key = $("#apiKey").value.trim();
+  if (key) body.anthropic_api_key = key;
+  const r = await fetch("/api/config", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const data = await r.json();
+  if (!r.ok) { $("#apiErr").textContent = data.error; return false; }
+  $("#apiErr").textContent = ""; $("#apiKey").value = "";
+  apiCfg = data; renderApi();
+  return true;
+}
+
+async function runTest() {
+  $("#srcSummary").textContent = "Sources : test en cours…";
+  $("#testInfo").textContent = "test en cours…";
+  lastTest = await (await fetch("/api/test", {method: "POST"})).json();
+  renderApi();
+}
+
+document.querySelectorAll("[data-open-api]").forEach((b) => b.onclick = () => { $("#apiModal").hidden = false; renderApi(); });
+$("#apiClose").onclick = () => { $("#apiModal").hidden = true; };
+$("#apiSave").onclick = () => saveConfig();
+$("#apiTest").onclick = async () => { if (await saveConfig()) await runTest(); };
+$("#retest").onclick = runTest;
+$("#keyClear").onclick = () => saveConfig({clear_anthropic_api_key: true});
+$("#customList").onclick = async (ev) => {
+  const i = ev.target.dataset.del; if (i === undefined) return;
+  apiCfg.custom.splice(Number(i), 1); await saveConfig();
+};
+$("#cAdd").onclick = async () => {
+  const headers = {}, h = $("#cHeader").value;
+  if (h.includes(":")) headers[h.slice(0, h.indexOf(":")).trim()] = h.slice(h.indexOf(":") + 1).trim();
+  apiCfg.custom.push({name: $("#cName").value.trim(), url: $("#cUrl").value.trim(), symbol_format: $("#cFormat").value.trim(),
+                      price_path: $("#cPath").value.trim(), headers});
+  if (await saveConfig()) { $("#cName").value = ""; $("#cUrl").value = ""; $("#cHeader").value = ""; await runTest(); }
+  else apiCfg.custom.pop();
+};
+$("#lossChips").onclick = (ev) => { if (ev.target.dataset.loss !== undefined) document.querySelector('[name="max_loss"]').value = ev.target.dataset.loss; };
+document.querySelector('[name="duration_choice"]').onchange = (ev) => { $("#customDuration").hidden = ev.target.value !== "custom"; };
+
 async function init() {
   const st = await (await fetch("/api/state")).json();
   const mode = document.querySelector('[name="mode"]');
-  if (!st.has_api_key) {
-    mode.value = "demo";
-    mode.options[0].disabled = true;
-    mode.options[0].textContent = "Claude (aucune clé ANTHROPIC_API_KEY)";
-  }
+  setClaudeAvailable(st.has_api_key);
   const syncDefaults = () => {
     const demo = mode.value === "demo";
     document.querySelector('[name="cycle_minutes"]').value = demo ? 0.25 : 5;
@@ -341,18 +517,29 @@ async function init() {
   mode.onchange = syncDefaults; syncDefaults();
   if (st.running) { $("#overlay").hidden = true; $("#stop").hidden = false; }
   poll();
+  await loadConfig();
+  if (!st.running) runTest();
 }
 
 $("#startForm").onsubmit = async (ev) => {
   ev.preventDefault();
   const body = Object.fromEntries(new FormData(ev.target).entries());
+  body.duration_hours = body.duration_choice === "custom" ? body.duration_custom : body.duration_choice;
+  if (body.market === "real" && lastTest) {
+    body.sources = lastTest.sources.filter((x) => x.ok).map((x) => x.name);
+    if (!body.sources.length) { $("#err").textContent = "Aucune source ne répond : ouvre 🔌 API pour en ajouter ou retester."; return; }
+  }
   const r = await fetch("/api/start", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
   const data = await r.json();
   if (!r.ok) { $("#err").textContent = data.error; return; }
   resetScreen();
-  $("#overlay").hidden = true; $("#stop").hidden = false;
+  $("#overlay").hidden = true;
+  const b = $("#stop"); b.hidden = false; b.textContent = "Lever la séance"; b.dataset.mode = "stop";
 };
-$("#stop").onclick = async () => { await fetch("/api/stop", {method: "POST"}); $("#overlay").hidden = false; };
+$("#stop").onclick = async () => {
+  if ($("#stop").dataset.mode !== "new") await fetch("/api/stop", {method: "POST"});
+  $("#overlay").hidden = false;
+};
 $("#tabs").onclick = (ev) => {
   const t = ev.target.dataset.tab; if (!t) return;
   $("#app").dataset.tab = t;

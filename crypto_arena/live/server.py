@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from .config import ApiConfig
 from .events import EventBus
 from .feed import DEFAULT_UNIVERSE, MultiExchangeFeed, SimulatedFeed
 from .notebook import Notebook
@@ -20,7 +21,10 @@ STATIC = Path(__file__).parent / "static"
 
 
 class App:
-    def __init__(self, notebook_path: Path, runs_dir: Path, feed_factory=None, client=None):
+    def __init__(self, notebook_path: Path, runs_dir: Path, feed_factory=None, client=None,
+                 config_path: Path = Path("config/apis.json"), http_get=None):
+        self.config = ApiConfig(config_path)
+        self.http_get = http_get
         self.notebook_path = notebook_path
         self.runs_dir = runs_dir
         self.feed_factory = feed_factory
@@ -30,8 +34,21 @@ class App:
         self.lock = threading.Lock()
 
     def has_api_key(self) -> bool:
-        return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+        return bool(self.config.anthropic_key() or os.environ.get("ANTHROPIC_AUTH_TOKEN")
                     or self.client is not None)
+
+    def claude_client(self):
+        if self.client is not None:
+            return self.client
+        key = self.config.anthropic_api_key
+        if key:
+            import anthropic
+            return anthropic.Anthropic(api_key=key)
+        return None
+
+    def test_sources(self) -> dict:
+        kwargs = {"get": self.http_get} if self.http_get else {}
+        return self.config.test(anthropic_client=self.client, **kwargs)
 
     def start(self, body: dict) -> dict:
         with self.lock:
@@ -47,8 +64,13 @@ class App:
                 except ImportError:
                     raise ValueError("le mode Claude nécessite `pip install anthropic`")
             demo = mode == "demo"
+            max_loss = float(body.get("max_loss", 0) or 0)
+            if not 0 <= max_loss < capital:
+                raise ValueError("la perte tolérée doit être positive et inférieure au montant confié")
             settings = Settings(
                 capital=capital,
+                max_loss=max_loss,
+                duration_seconds=max(0.0, float(body.get("duration_hours", 0) or 0)) * 3600,
                 mode=mode,
                 fee_rate=float(body.get("fee_pct", 0.1)) / 100,
                 min_exposure=float(body.get("min_exposure_pct", 50)) / 100,
@@ -63,12 +85,17 @@ class App:
             if self.feed_factory:
                 feed = self.feed_factory(settings)
             elif body.get("market", "real") == "real":
-                feed = MultiExchangeFeed(settings.universe)
+                kwargs = {"get": self.http_get} if self.http_get else {}
+                sources = self.config.exchanges(only=body.get("sources") or None, **kwargs)
+                if not sources:
+                    raise ValueError("aucune source de marché active : ouvre le menu 🔌 API")
+                feed = MultiExchangeFeed(settings.universe, exchanges=sources)
             else:
                 feed = SimulatedFeed(settings.universe, volatility=0.002)
             stamp = time.strftime("%Y%m%d-%H%M%S")
             self.bus = EventBus(self.runs_dir / f"salle-{stamp}.jsonl")
-            self.room = TradingRoom(settings, feed, self.bus, Notebook(self.notebook_path), self.client)
+            client = None if demo else self.claude_client()
+            self.room = TradingRoom(settings, feed, self.bus, Notebook(self.notebook_path), client)
             self.room.start()
             return {"ok": True}
 
@@ -94,7 +121,10 @@ def make_handler(app: App):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # l'écran a abandonné la requête (nouvelle séance, onglet fermé)
 
         def do_GET(self):
             url = urlparse(self.path)
@@ -105,6 +135,8 @@ def make_handler(app: App):
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+            elif url.path == "/api/config":
+                self._json(app.config.public())
             elif url.path == "/api/state":
                 self._json(app.state())
             elif url.path == "/api/events":
@@ -120,6 +152,11 @@ def make_handler(app: App):
             try:
                 if self.path == "/api/start":
                     self._json(app.start(body))
+                elif self.path == "/api/config":
+                    app.config.update(body)
+                    self._json(app.config.public())
+                elif self.path == "/api/test":
+                    self._json(app.test_sources())
                 elif self.path == "/api/stop":
                     self._json(app.stop())
                 else:
@@ -131,8 +168,9 @@ def make_handler(app: App):
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765, notebook: str = "carnet/carnet.json",
-          runs_dir: str = "runs", open_browser: bool = True, app: App | None = None) -> None:
-    app = app or App(Path(notebook), Path(runs_dir))
+          runs_dir: str = "runs", open_browser: bool = True, app: App | None = None,
+          config: str = "config/apis.json") -> None:
+    app = app or App(Path(notebook), Path(runs_dir), config_path=Path(config))
     server = ThreadingHTTPServer((host, port), make_handler(app))
     url = f"http://{host}:{port}"
     print(f"Salle des marchés ouverte sur {url}  (Ctrl+C pour fermer)")

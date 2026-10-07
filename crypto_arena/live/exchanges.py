@@ -10,8 +10,8 @@ from dataclasses import dataclass
 USER_AGENT = "crypto-arena/1.0 (paper trading)"
 
 
-def http_get(url: str, timeout: float = 10.0) -> object:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+def http_get(url: str, timeout: float = 10.0, headers: dict | None = None) -> object:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json", **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.load(resp)
 
@@ -262,6 +262,55 @@ class Binance(Exchange):
         d = self.get(self.url("/depth", symbol=f"{symbol}USDT", limit=depth))
         return {"bids": [[float(p), float(q)] for p, q in d["bids"]],
                 "asks": [[float(p), float(q)] for p, q in d["asks"]]}
+
+
+def extract(data: object, path: str) -> object:
+    """Suit un chemin du type `result.*.c.0` : clé, indice, ou `*` pour le premier élément."""
+    for key in [k for k in path.split(".") if k]:
+        if key == "*":
+            data = next(iter(data.values())) if isinstance(data, dict) else data[0]
+        elif isinstance(data, list):
+            data = data[int(key)]
+        else:
+            data = data[key]
+    return data
+
+
+class CustomExchange(Exchange):
+    """Une API ajoutée par l'utilisateur : une URL par actif contenant {symbol}, et le chemin du prix dans le JSON."""
+
+    def __init__(self, name: str, url: str, symbol_format: str = "{SYM}USDT", price_path: str = "price",
+                 headers: dict | None = None, get=http_get):
+        super().__init__(get)
+        if "{symbol}" not in url or not url.startswith(("http://", "https://")):
+            raise ValueError("l'URL doit commencer par http(s):// et contenir {symbol}")
+        self.name = name
+        self.url_template = url
+        self.symbol_format = symbol_format or "{SYM}USDT"
+        self.price_path = price_path or "price"
+        self.headers = headers or {}
+
+    def _symbol(self, sym: str) -> str:
+        return self.symbol_format.replace("{SYM}", sym.upper()).replace("{sym}", sym.lower())
+
+    def tickers(self, symbols):
+        out, last_error = {}, None
+        for sym in symbols:
+            if sym in self.unsupported:
+                continue
+            pair = self._symbol(sym)
+            url = self.url_template.replace("{symbol}", urllib.parse.quote(pair, safe=""))
+            try:
+                data = self.get(url, headers=self.headers) if self.headers else self.get(url)
+                price = _f(extract(data, self.price_path.replace("{symbol}", pair)))
+            except Exception as e:
+                last_error = e
+                continue
+            if price:
+                out[sym] = Quote(price)
+        if not out and last_error is not None:
+            raise last_error
+        return out
 
 
 ALL_EXCHANGES = [Kraken, Gate, Coinbase, OKX, Bybit, KuCoin, Binance]

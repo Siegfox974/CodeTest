@@ -70,6 +70,7 @@ class App:
             settings = Settings(
                 capital=capital,
                 max_loss=max_loss,
+                inherit=str(body.get("inherit", "on")).lower() in ("on", "true", "1", "yes"),
                 duration_seconds=max(0.0, float(body.get("duration_hours", 0) or 0)) * 3600,
                 mode=mode,
                 fee_rate=float(body.get("fee_pct", 0.1)) / 100,
@@ -98,6 +99,15 @@ class App:
             self.room = TradingRoom(settings, feed, self.bus, Notebook(self.notebook_path), client)
             self.room.start()
             return {"ok": True}
+
+    def director(self, body: dict) -> dict:
+        text = str(body.get("text", "")).strip()
+        if not text:
+            raise ValueError("message vide")
+        if not self.room or self.room.stopping.is_set() or self.room.trader is None:
+            raise ValueError("aucune séance en cours : lance d'abord une séance")
+        self.room.director_message(text[:1000])
+        return {"ok": True}
 
     def stop(self) -> dict:
         if self.room:
@@ -155,6 +165,8 @@ def make_handler(app: App):
                 elif self.path == "/api/config":
                     app.config.update(body)
                     self._json(app.config.public())
+                elif self.path == "/api/director":
+                    self._json(app.director(body))
                 elif self.path == "/api/test":
                     self._json(app.test_sources())
                 elif self.path == "/api/stop":

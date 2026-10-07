@@ -17,6 +17,8 @@ class Account:
     cash: float
     threshold: float = 0.0          # seuil de mort : capital confié moins la perte tolérée
     holdings: dict[str, float] = field(default_factory=dict)
+    cost_basis: dict[str, float] = field(default_factory=dict)   # USDT dépensés (frais compris) par position
+    inherited_from: str | None = None
     frozen: str | None = None
     orders: int = 0
     peak: float = 0.0
@@ -42,8 +44,22 @@ class PaperBroker:
             self.accounts[owner] = acc
             return acc
 
+    def inherit(self, heir: str, from_owner: str, max_loss: float) -> Account:
+        """Le successeur reprend le portefeuille tel quel. Ce qu'on lui confie, c'est sa valeur à cet instant."""
+        with self.lock:
+            old = self.accounts[from_owner]
+            value = old.value(self.prices())
+            acc = Account(heir, value, old.cash, threshold=value - max_loss, holdings=dict(old.holdings),
+                          cost_basis=dict(old.cost_basis), inherited_from=from_owner, peak=value)
+            self.accounts[heir] = acc
+            return acc
+
     def prices(self) -> dict[str, float]:
         return dict(self.feed.prices)
+
+    def value(self, owner: str) -> float:
+        with self.lock:
+            return self.accounts[owner].value(self.prices())
 
     def snapshot(self, owner: str) -> dict:
         with self.lock:
@@ -51,10 +67,12 @@ class PaperBroker:
             prices = self.prices()
             value = acc.value(prices)
             acc.peak = max(acc.peak, value)
-            positions = {
-                s: {"quantite": q, "prix": prices[s], "valeur_usdt": round(q * prices[s], 2)}
-                for s, q in acc.holdings.items()
-            }
+            positions = {}
+            for s, q in acc.holdings.items():
+                cost = acc.cost_basis.get(s, 0.0)
+                positions[s] = {"quantite": q, "prix": prices[s], "valeur_usdt": round(q * prices[s], 2),
+                                "prix_moyen_achat": cost / q if q else None,
+                                "plus_ou_moins_value_usdt": round(q * prices[s] - cost, 2) if cost else None}
             return {
                 "capital_confie": acc.capital,
                 "valeur_totale": round(value, 2),
@@ -67,6 +85,7 @@ class PaperBroker:
                 "plus_haut": round(acc.peak, 2),
                 "ordres_passes": acc.orders,
                 "gele": acc.frozen,
+                "herite_de": acc.inherited_from,
             }
 
     def buy(self, owner: str, symbol: str, usdt: float) -> dict:
@@ -81,6 +100,7 @@ class PaperBroker:
             qty = usdt / price
             acc.cash -= cost
             acc.holdings[symbol] = acc.holdings.get(symbol, 0.0) + qty
+            acc.cost_basis[symbol] = acc.cost_basis.get(symbol, 0.0) + cost
             acc.orders += 1
             return {"achat": symbol, "quantite": qty, "prix": price, "montant_usdt": usdt, "frais": usdt * self.fee_rate}
 
@@ -98,8 +118,10 @@ class PaperBroker:
             proceeds = qty * price
             acc.cash += proceeds * (1 - self.fee_rate)
             acc.holdings[symbol] = held - qty
+            acc.cost_basis[symbol] = acc.cost_basis.get(symbol, 0.0) * (1 - qty / held)
             if acc.holdings[symbol] <= held * 1e-12:
                 del acc.holdings[symbol]
+                acc.cost_basis.pop(symbol, None)
             acc.orders += 1
             return {"vente": symbol, "quantite": qty, "prix": price, "montant_usdt": proceeds,
                     "frais": proceeds * self.fee_rate}

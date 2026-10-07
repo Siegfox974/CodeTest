@@ -7,6 +7,7 @@ import math
 
 from .broker import OrderRejected
 from .feed import INTERVALS, FeedError
+from .guide import read_section
 from .personas import DEATH_METHODS
 
 
@@ -42,6 +43,8 @@ def tool_schemas(universe: list[str]) -> list[dict]:
              {"symbole": symbol, "montant_usdt": {"type": "number"}}, ["symbole", "montant_usdt"]),
         tool("vendre", "Vend un pourcentage (1 à 100) de ta position sur un actif au prix du marché.",
              {"symbole": symbol, "pourcentage": {"type": "number"}}, ["symbole", "pourcentage"]),
+        tool("lire_guide", "Lit une section du guide d'investissement crypto de la salle (0 = sommaire).",
+             {"section": {"type": "integer"}}, ["section"]),
         tool("lire_carnet", "Lit le carnet de notes laissé par tes prédécesseurs, avec l'avis de chacun sur chaque note."),
         tool("ajouter_note", "Ajoute une note au carnet pour tes successeurs. Cite tes sources (URL) quand tu en as.",
              {"texte": {"type": "string"}, "sources": {"type": "array", "items": {"type": "string"}}},
@@ -125,15 +128,23 @@ class TraderTools:
 
     def t_acheter(self, symbole: str, montant_usdt: float) -> dict:
         fill = self.room.broker.buy(self.seat.account, symbole, float(montant_usdt))
-        self._act("🟢", f"ACHAT {fill['montant_usdt']:.2f} USDT de {symbole} à {fill['prix']:.6g}", fill)
+        text = f"ACHAT {fill['montant_usdt']:.2f} USDT de {symbole} à {fill['prix']:.6g}"
+        self._act("🟢", text, fill)
         self.room.publish_portfolio()
+        self.room.on_trade(self.seat, text)
         return fill
 
     def t_vendre(self, symbole: str, pourcentage: float) -> dict:
         fill = self.room.broker.sell(self.seat.account, symbole, float(pourcentage))
-        self._act("🔴", f"VENTE {pourcentage:g} % de {symbole} ({fill['montant_usdt']:.2f} USDT à {fill['prix']:.6g})", fill)
+        text = f"VENTE {pourcentage:g} % de {symbole} ({fill['montant_usdt']:.2f} USDT à {fill['prix']:.6g})"
+        self._act("🔴", text, fill)
         self.room.publish_portfolio()
+        self.room.on_trade(self.seat, text)
         return fill
+
+    def t_lire_guide(self, section: int) -> str:
+        self._act("📖", f"consulte le guide (section {int(section)})" if section else "consulte le sommaire du guide")
+        return read_section(int(section))
 
     def t_lire_carnet(self) -> list[dict]:
         notes = self.room.notebook.view()

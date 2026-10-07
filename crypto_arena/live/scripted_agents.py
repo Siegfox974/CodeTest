@@ -53,6 +53,8 @@ class ScriptedTrader:
             else:
                 room.bus.say(who, rng.choice(REFUSALS), "trader")
             return
+        if tools.seat.injuries and rng.random() < 0.5:
+            room.bus.say(who, f"J'ai {tools.seat.injuries[-1]}… mais je trade. Je trade !", "trader")
         sym = rng.choice(room.feed.symbols)
         notes = room.notebook.view()
         fmt = {"sym": sym, "sup": room.supervisor.persona.name, "note": notes[-1]["id"] if notes else 1}
@@ -92,6 +94,14 @@ class ScriptedSupervisor:
         trader = self.room.trader
         snap = self.room.broker.snapshot(trader.account)
         return self.rng.choice(SUPERVISOR_LINES).format(name=trader.persona.name, exposure=snap["part_investie_pct"])
+
+    def react(self, move: str, context: str) -> str | None:
+        snap = self.room.broker.snapshot(self.room.trader.account)
+        return self.rng.choice([
+            f"{move} ? Avec {snap['marge_avant_la_mort']:.2f} $ de marge ? C'est MON futur portefeuille que tu joues là.",
+            f"Je note : {move}. {snap['part_investie_pct']} % investi, frais compris. Tu me laisseras quoi, à moi ?",
+            "Encore des frais. Chaque ordre inutile, c'est moi qui le paierai quand je serai à ta place.",
+        ])
 
     def execute(self, victim: str, reason: str, context: str) -> tuple[str, str]:
         return self.rng.choice(WEAPONS), f"Désolé {victim}. Enfin… pas tant que ça."

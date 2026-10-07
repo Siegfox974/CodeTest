@@ -76,3 +76,30 @@ def execution_message(executioner: str, victim: str, weapon: str, reason: str) -
 
 # L'agent de marché : du code, pas un LLM. C'est lui qui interroge directement les bourses.
 SCOUT = Persona("Scout", "📡", "#607d8b", "infatigable, il ne dort jamais et ne croit qu'aux chiffres")
+
+# Le directeur, c'est l'utilisateur. Son homme de main exécute ses ordres plus vite que n'importe quel humain.
+DIRECTOR = Persona("Directeur", "🎩", "#d4af37", "le patron : il exige des résultats, tout de suite")
+ENFORCER = Persona("Brutus", "🦍", "#b0413e",
+                   "homme de main du directeur : vif, à l'affût, il frappe avant que tu aies fini de cligner des yeux")
+
+BEATINGS = [
+    "à coups de batte de baseball", "au poing américain", "en lui fracassant son clavier sur le crâne",
+    "à coups de pied dans les côtes", "avec un annuaire de la Bourse", "en lui écrasant la tête contre son écran",
+    "à coups de matraque télescopique", "à coups de genou dans le ventre", "avec une chaise de bureau",
+]
+INJURIES = [
+    "deux côtes cassées", "le nez en miettes", "l'arcade ouverte", "trois dents en moins", "un œil au beurre noir",
+    "les doigts écrasés", "la mâchoire déboîtée", "une commotion cérébrale", "le poignet fracturé",
+]
+ENFORCER_LINES = [
+    "Le patron veut des résultats. Pas des excuses.",
+    "La prochaine fois, je ne retiens pas mes coups.",
+    "Tu trades ou tu saignes. Choisis.",
+    "Rien de personnel. Enfin… un peu.",
+    "Le directeur compte les minutes. Moi, je compte tes os.",
+]
+
+
+def beating_message(enforcer: str, victim: str, manner: str, injury: str, reaction_s: float) -> str:
+    reaction = f"{reaction_s * 1000:.0f} ms" if reaction_s < 1 else f"{reaction_s:.2f} s".replace(".", ",")
+    return f"{enforcer} a tabassé {victim} {manner} sur ordre du directeur : {injury}. Temps de réaction : {reaction}."

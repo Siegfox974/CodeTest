@@ -9,21 +9,22 @@
   --bg: #d1d7db; --app: #f0f2f5; --side: #ffffff; --line: #e9edef; --text: #111b21; --muted: #667781;
   --header: #f0f2f5; --chat: #efeae2; --in: #ffffff; --out: #d9fdd3; --accent: #00a884; --danger: #e5484d;
   --warn: #f5a524; --sys: #ffeecd; --sys-text: #54656f; --thought: rgba(255,255,255,.55); --death: #1c1c1e;
-  --chip: rgba(11,20,26,.06); --bar: #e9edef;
+  --chip: rgba(11,20,26,.06); --bar: #e9edef; --director: #fff3c4;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0c1317; --app: #111b21; --side: #111b21; --line: #222d34; --text: #e9edef; --muted: #8696a0;
     --header: #202c33; --chat: #0b141a; --in: #202c33; --out: #005c4b; --sys: #182229; --sys-text: #8696a0;
-    --thought: rgba(32,44,51,.55); --death: #000; --chip: rgba(255,255,255,.06); --bar: #2a3942;
+    --thought: rgba(32,44,51,.55); --death: #000; --chip: rgba(255,255,255,.06); --bar: #2a3942; --director: #5c4a12;
   }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--text); font: 14.2px/1.4 "Segoe UI", Helvetica, Arial, sans-serif; }
 button { font: inherit; cursor: pointer; }
-.app { display: grid; grid-template-columns: 290px 1fr 340px; height: 100vh; max-width: 1600px; margin: 0 auto;
+.app { display: grid; grid-template-columns: 290px 1fr 340px; grid-template-rows: minmax(0, 1fr); height: 100vh; max-width: 1600px; margin: 0 auto;
   background: var(--app); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+aside, .panel, .chat { min-height: 0; }
 aside, .panel { background: var(--side); border-right: 1px solid var(--line); overflow-y: auto; min-width: 0; }
 .panel { border-right: 0; border-left: 1px solid var(--line); }
 .bar { display: flex; align-items: center; gap: 10px; height: 59px; padding: 0 16px; background: var(--header);
@@ -73,6 +74,24 @@ aside, .panel { background: var(--side); border-right: 1px solid var(--line); ov
   text-align: center; max-width: 520px; box-shadow: 0 6px 20px rgba(0,0,0,.35); border: 1px solid #333; }
 .death .cross { font-size: 30px; }
 .death .txt { font-size: 15.5px; margin-top: 6px; }
+.beating { flex: none; align-self: center; background: linear-gradient(135deg, #3b0d0d, #1c0606); color: #ffd7d7;
+  border: 1px solid #7a1f1f; border-radius: 12px; padding: 12px 18px; margin: 10px 0; text-align: center; max-width: 560px;
+  box-shadow: 0 4px 16px rgba(122,31,31,.35); }
+.beating .fist { font-size: 26px; }
+.beating .txt { font-size: 14.5px; margin-top: 4px; }
+.beating .why { font-size: 12px; opacity: .75; margin-top: 4px; }
+.row.out .bubble.director { background: var(--director); }
+.compose { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 10px; background: var(--header);
+  border-top: 1px solid var(--line); }
+.compose .quick { display: flex; gap: 6px; flex-wrap: wrap; }
+.compose form { display: flex; gap: 8px; }
+.compose input { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border-radius: 20px; border: 1px solid var(--line);
+  background: var(--app); color: var(--text); }
+.compose .send { border-radius: 50%; width: 42px; height: 42px; padding: 0; font-size: 18px; }
+.contract { border-top: 1px solid var(--line); padding: 7px 0; font-size: 13px; }
+.contract:first-child { border-top: 0; }
+.contract .head { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
+.injuries { color: #e57373; font-size: 12px; }
 .card { margin: 12px 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; }
 .big { font-size: 26px; font-weight: 700; }
 .kv { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; margin: 3px 0; }
@@ -126,7 +145,7 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
 .modal h3 { font-size: 12.5px; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 4px; }
 .go { width: 100%; padding: 13px; font-size: 16px; border-radius: 10px; }
 @media (max-width: 1000px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: 100dvh; }
+  .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; }
   .tabs { display: flex; background: var(--header); border-bottom: 1px solid var(--line); }
   .tabs button { flex: 1; border: 0; background: none; padding: 12px 4px; color: var(--muted); border-bottom: 3px solid transparent; }
   .tabs button.on { color: var(--accent); border-color: var(--accent); }
@@ -156,12 +175,27 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
       <div style="min-width:0;flex:1"><h1>Salle des marchés</h1><div class="sub" id="subtitle">en attente du capital…</div></div>
     </div>
     <div id="feed"></div>
+    <div class="compose">
+      <div class="quick">
+        <button type="button" class="chip" data-order="Brutus, tabasse-le maintenant.">🥊 Tabasse-le</button>
+        <button type="button" class="chip" data-order="Brutus, tabasse-le s'il ne fait pas +0,5 % en 15 min.">⏱ +0,5 % en 15 min, sinon…</button>
+        <button type="button" class="chip" data-order="Brutus, tabasse-le à la moindre perte.">💸 À la moindre perte</button>
+        <button type="button" class="chip" data-order="Brutus, tabasse-le s'il ne passe aucun ordre en 10 min, toutes les 10 min.">😴 S'il ne fait rien</button>
+        <button type="button" class="chip" data-order="Brutus, annule tous les contrats.">✋ Annuler les contrats</button>
+      </div>
+      <form id="directorForm">
+        <input id="directorInput" autocomplete="off" placeholder="🎩 Écris en tant que Directeur… (ex. « Brutus, tabasse-le s'il ne fait pas +1 % en 30 min »)">
+        <button class="btn send" type="submit" title="Envoyer">➤</button>
+      </form>
+    </div>
   </main>
   <section class="panel">
     <div class="bar"><h1>Portefeuille</h1><span class="badge" id="timer" title="temps restant de la séance">⏳ —</span><span class="badge" id="gen">—</span></div>
     <div class="card" id="wallet"><div class="empty" style="padding:0">Aucun portefeuille pour l'instant.</div></div>
     <div class="section">Marché</div>
     <div class="card"><table id="market"></table><div class="kv" style="margin-top:8px"><span id="source"></span></div></div>
+    <div class="section">Ordres du directeur 🦍</div>
+    <div class="card" id="contracts"><div class="empty" style="padding:0">Aucun ordre en cours.</div></div>
     <div class="section">Carnet de la lignée</div>
     <div class="card" id="notes"><div class="empty" style="padding:0">Le carnet est vide.</div></div>
     <div class="section">Coûts de l'expérience</div>
@@ -210,6 +244,8 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
         <input name="fee_pct" type="number" min="0" step="any" value="0.1"></label>
       <label class="field">Investi au minimum (%)
         <input name="min_exposure_pct" type="number" min="0" max="100" value="50"></label>
+      <label class="field" style="grid-column:1/-1;flex-direction:row;display:flex;align-items:center;gap:8px;color:var(--text)">
+        <input type="checkbox" name="inherit" checked style="width:auto"> Le successeur hérite du portefeuille de son prédécesseur (sinon : portefeuille neuf)</label>
       <label class="field">Avertissements avant exécution
         <input name="max_strikes" type="number" min="1" value="3"></label>
       <label class="field">Effort de réflexion
@@ -265,7 +301,7 @@ let last = -1, busId = null, roster = null, typing = {}, prevAuthor = null, poll
 
 function resetScreen() {
   if (pollCtl) pollCtl.abort();
-  last = -1; busId = null; roster = null; typing = {}; prevAuthor = null;
+  last = -1; busId = null; roster = null; typing = {}; prevAuthor = null; contracts = [];
   feed.innerHTML = "";
 }
 
@@ -278,7 +314,7 @@ const avatar = (p, cls = "") => `<div class="avatar ${cls}" style="background:${
 const nearBottom = () => feed.scrollHeight - feed.scrollTop - feed.clientHeight < 160;
 
 function bubble(e, cls, inner) {
-  const out = e.role === "superviseur";
+  const out = e.role === "directeur";
   const key = e.author.name + e.role;
   const first = prevAuthor !== key;
   prevAuthor = key;
@@ -290,7 +326,7 @@ function bubble(e, cls, inner) {
 
 function render(e) {
   let node = null;
-  if (e.kind === "message") node = bubble(e, "", `<span class="text">${md(e.text)}</span>`);
+  if (e.kind === "message") node = bubble(e, e.role === "directeur" ? "director" : "", `<span class="text">${md(e.text)}</span>`);
   else if (e.kind === "thought") {
     node = bubble(e, "thought", `💭 <span class="text">${md(e.text)}</span>${e.text.length > 280 ? '<br><button class="more">voir toute la pensée</button>' : ""}`);
     const b = node.querySelector(".more");
@@ -309,6 +345,11 @@ function render(e) {
     node.className = "death";
     node.innerHTML = `<div class="cross">${e.manner === "execution" ? "🔫" : "✝"}</div><div class="txt">${esc(e.text)}</div>`;
     prevAuthor = null;
+  } else if (e.kind === "beating") {
+    node = document.createElement("div");
+    node.className = "beating";
+    node.innerHTML = `<div class="fist">🥊</div><div class="txt">${esc(e.text)}</div><div class="why">Motif : ${esc(e.reason)}</div>`;
+    prevAuthor = null;
   }
   if (node) { const stick = nearBottom(); feed.appendChild(node); if (stick) feed.scrollTop = feed.scrollHeight; }
 }
@@ -316,10 +357,13 @@ function render(e) {
 function renderRoster(r) {
   roster = r;
   $("#gen").textContent = `génération ${r.generation}`;
-  $("#staff").innerHTML = [[r.trader, `trader · génération ${r.generation}`], [r.supervisor, "superviseur · attend sa chance"], [r.scout, "agent de marché · interroge les bourses"]]
-    .map(([p, role]) => `<div class="person">${avatar(p)}<div class="who"><div class="name">${esc(p.name)}</div><div class="sub">${role}</div><div class="sub" title="${esc(p.temperament)}">${esc(p.temperament)}</div></div></div>`).join("");
+  const inj = r.injuries || {};
+  $("#staff").innerHTML = [[r.trader, `trader · génération ${r.generation}`, inj.trader], [r.supervisor, "superviseur · hérite s'il meurt", inj.supervisor],
+                           [r.enforcer, "homme de main du directeur", null], [r.scout, "agent de marché · interroge les bourses", null]]
+    .filter(([p]) => p)
+    .map(([p, role, wounds]) => `<div class="person">${avatar(p)}<div class="who"><div class="name">${esc(p.name)}</div><div class="sub">${role}</div>${wounds && wounds.length ? `<div class="injuries" title="${esc(wounds.join(", "))}">🩹 ${wounds.length} blessure(s) : ${esc(wounds.join(", "))}</div>` : ""}<div class="sub" title="${esc(p.temperament)}">${esc(p.temperament)}</div></div></div>`).join("");
   $("#cemetery").innerHTML = r.cemetery.length ? r.cemetery.slice().reverse().map((d) =>
-    `<div class="person dead">${avatar(d.persona)}<div class="who"><div class="name">✝ ${esc(d.persona.name)} <span class="badge">gén. ${d.generation}</span></div><div class="sub" title="${esc(d.cause)}">${esc(d.cause)}</div><div class="sub">perte ${usd(d.perte)} · ${d.tours} tours · ${d.duree_min} min</div></div></div>`).join("")
+    `<div class="person dead">${avatar(d.persona)}<div class="who"><div class="name">✝ ${esc(d.persona.name)} <span class="badge">gén. ${d.generation}</span></div><div class="sub" title="${esc(d.cause)}">${esc(d.cause)}</div><div class="sub">perte ${usd(d.perte)} · ${d.tours} tours · ${d.duree_min} min${d.blessures && d.blessures.length ? ` · 🩹 ${d.blessures.length}` : ""}</div></div></div>`).join("")
     : '<div class="empty">Personne, pour l\'instant.</div>';
   updateSubtitle();
 }
@@ -338,9 +382,12 @@ function renderWallet(e) {
   const safety = Math.max(0, Math.min(100, (m / (tol * 2)) * 100));
   const minExp = roster ? roster.settings.min_exposure * 100 : 50;
   $("#wallet").innerHTML = `
-    <div class="kv"><span>${avatar(e.trader, "sm").replace('class="avatar sm"', 'class="avatar sm" style="display:inline-grid;vertical-align:middle"')} ${esc(e.trader.name)}</span>${e.condemned ? '<span class="badge" style="color:var(--danger)">condamné</span>' : ""}</div>
+    <div class="kv"><span>${avatar(e.trader, "sm").replace('class="avatar sm"', 'class="avatar sm" style="display:inline-grid;vertical-align:middle"')} ${esc(e.trader.name)}</span>${e.condemned ? '<span class="badge" style="color:var(--danger)">condamné</span>' : e.takeover ? '<span class="badge" title="la règle s\'applique à la fin de son premier tour">prise de poste</span>' : ""}</div>
     <div class="big ${m < 0 ? "neg" : ""}">${usd(s.valeur_totale)}</div>
-    <div class="kv"><span>Capital confié</span><b>${usd(cap)}</b></div>
+    ${e.inherited_from ? `<div class="kv"><span>Hérité de</span><b>✝ ${esc(e.inherited_from)}</b></div>` : ""}
+    <div class="kv"><span>${e.inherited_from ? "Valeur à la reprise" : "Capital confié"}</span><b>${usd(cap)}</b></div>
+    ${e.initial_capital && e.inherited_from ? `<div class="kv"><span>Lignée (départ ${usd(e.initial_capital)})</span><b class="${s.valeur_totale >= e.initial_capital ? "pos" : "neg"}">${s.valeur_totale >= e.initial_capital ? "+" : ""}${usd(s.valeur_totale - e.initial_capital)}</b></div>` : ""}
+    ${e.injuries && e.injuries.length ? `<div class="kv"><span>Blessures</span><span class="injuries">🩹 ${esc(e.injuries.join(", "))}</span></div>` : ""}
     <div class="kv"><span>Seuil de mort</span><b>${usd(s.seuil_de_mort)}</b></div>
     <div class="kv"><span>Marge avant la mort</span><b class="${m >= 0 ? "pos" : "neg"}">${m >= 0 ? "+" : ""}${usd(m)}</b></div>
     <div class="meter" title="jauge de survie"><i style="width:${safety}%;background:${safety > 50 ? "var(--accent)" : safety > 20 ? "var(--warn)" : "var(--danger)"}"></i><s style="left:50%" title="capital confié"></s></div>
@@ -348,7 +395,7 @@ function renderWallet(e) {
     <div class="meter"><i style="width:${s.part_investie_pct}%"></i><s style="left:${minExp}%"></s></div>
     <div class="kv"><span>Avertissements (lâcheté)</span><span class="strikes">${"⚠️".repeat(e.strikes)}${"▫️".repeat(Math.max(0, e.max_strikes - e.strikes))}</span></div>
     <div class="kv"><span>Cash</span><b>${usd(s.cash_usdt)}</b></div>
-    <table>${Object.entries(s.positions).map(([k, p]) => `<tr><td>${k}</td><td>${px(p.quantite)}</td><td>${usd(p.valeur_usdt)}</td></tr>`).join("")}</table>`;
+    <table>${Object.entries(s.positions).map(([k, p]) => `<tr><td>${k}</td><td>${px(p.quantite)}</td><td>${usd(p.valeur_usdt)}${p.plus_ou_moins_value_usdt != null ? ` <span class="${p.plus_ou_moins_value_usdt >= 0 ? "pos" : "neg"}" style="font-size:11px">${p.plus_ou_moins_value_usdt >= 0 ? "+" : ""}${p.plus_ou_moins_value_usdt.toFixed(2)}</span>` : ""}</td></tr>`).join("")}</table>`;
 }
 
 function renderMarket(e) {
@@ -385,6 +432,7 @@ function handle(e) {
     case "portfolio": renderWallet(e); break;
     case "market": renderMarket(e); break;
     case "notes": renderNotes(e.notes); break;
+    case "contracts": contracts = e.contracts; contractsAt = Date.now() / 1000; renderContracts(); break;
     case "stats": renderStats(e); break;
     case "typing": if (e.on) typing[e.who.name] = e.who.name; else delete typing[e.who.name]; updateSubtitle(); break;
     case "stopped": showNewSession(); typing = {}; updateSubtitle(); break;
@@ -407,7 +455,28 @@ async function poll() {
   }
 }
 
-let sessionEnds = null, apiCfg = null, lastTest = null;
+let sessionEnds = null, apiCfg = null, lastTest = null, contracts = [], contractsAt = 0;
+
+function renderContracts() {
+  const shown = contracts.slice().reverse();
+  if (!shown.length) { $("#contracts").innerHTML = '<div class="empty" style="padding:0">Aucun ordre en cours.</div>'; return; }
+  const now = Date.now() / 1000;
+  $("#contracts").innerHTML = shown.map((c) => {
+    const left = c.status === "actif" && c.remaining_s != null ? Math.max(0, Math.round(c.remaining_s - (now - contractsAt))) : null;
+    const badge = {actif: "st-confirm", rempli: "", annulé: "", caduc: ""}[c.status] || "";
+    return `<div class="contract"><div class="head"><span>n°${c.id} · <span class="badge ${badge}">${esc(c.status)}</span></span>
+      <span>${left != null ? "⏳ " + (left >= 60 ? Math.floor(left / 60) + " min " + String(left % 60).padStart(2, "0") + " s" : left + " s") : ""}${c.beatings ? ` · 🥊 ×${c.beatings}` : ""}</span></div>
+      ${esc(c.description)}</div>`;
+  }).join("");
+}
+setInterval(() => { if (contracts.some((c) => c.status === "actif" && c.remaining_s != null)) renderContracts(); }, 1000);
+
+async function sendDirector(text) {
+  if (!text.trim()) return;
+  const r = await fetch("/api/director", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})});
+  if (!r.ok) { const d = await r.json(); alert(d.error); return false; }
+  return true;
+}
 
 function tickTimer() {
   if (sessionEnds === null || sessionEnds === undefined) { if ($("#timer").textContent !== "⏳ terminée") $("#timer").textContent = "⏳ ∞"; return; }
@@ -502,6 +571,15 @@ $("#cAdd").onclick = async () => {
   if (await saveConfig()) { $("#cName").value = ""; $("#cUrl").value = ""; $("#cHeader").value = ""; await runTest(); }
   else apiCfg.custom.pop();
 };
+$("#directorForm").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const input = $("#directorInput");
+  if (await sendDirector(input.value)) input.value = "";
+};
+document.querySelector(".compose .quick").onclick = (ev) => {
+  const order = ev.target.dataset.order;
+  if (order) sendDirector(order);
+};
 $("#lossChips").onclick = (ev) => { if (ev.target.dataset.loss !== undefined) document.querySelector('[name="max_loss"]').value = ev.target.dataset.loss; };
 document.querySelector('[name="duration_choice"]').onchange = (ev) => { $("#customDuration").hidden = ev.target.value !== "custom"; };
 
@@ -525,6 +603,7 @@ $("#startForm").onsubmit = async (ev) => {
   ev.preventDefault();
   const body = Object.fromEntries(new FormData(ev.target).entries());
   body.duration_hours = body.duration_choice === "custom" ? body.duration_custom : body.duration_choice;
+  body.inherit = ev.target.querySelector('[name="inherit"]').checked;
   if (body.market === "real" && lastTest) {
     body.sources = lastTest.sources.filter((x) => x.ok).map((x) => x.name);
     if (!body.sources.length) { $("#err").textContent = "Aucune bourse ne répond depuis ta machine. Ouvre API pour voir les erreurs, ajouter une source ou retester, ou choisis « Marché : Simulé » en attendant."; return; }

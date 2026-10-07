@@ -7,7 +7,40 @@ par un successeur sélectionné pour faire mieux. Et ainsi de suite.
 
 > Tout se passe en **simulation, avec de l'argent fictif** : aucun ordre réel n'est passé.
 
-## Lancer
+## La Salle des marchés (agents Claude, marché réel, écran de chat)
+
+```bash
+pip install anthropic
+export ANTHROPIC_API_KEY=...          # sans clé, seul le mode démo est proposé
+python -m crypto_arena salle          # ouvre http://127.0.0.1:8765
+```
+
+Tu saisis le montant confié, tu règles la séance, puis tu cliques sur **« Maintenant, tu travailles ! »**.
+
+- **Les agents** portent un prénom tiré au hasard, un avatar et un tempérament. Ce sont des agents Claude
+  (`claude-opus-5-5`, réflexion adaptative). Ils font des **recherches sur internet** (`web_search`, `web_fetch`) et
+  consultent les **prix réels de Binance** (API publique, sans clé). Ils achètent et vendent sur un portefeuille fictif.
+- **Le carnet de la lignée** (`carnet/carnet.json`) est conservé d'une séance à l'autre. Chaque agent y laisse des notes
+  sourcées. Ses successeurs ne lui font pas confiance : ils vérifient chaque note puis la **confirment**, la **contestent**
+  ou la **corrigent**. L'original reste visible, barré.
+- **La règle** est contrôlée toutes les 30 s, aux prix du marché. Si la valeur passe sous le capital confié, le compte est
+  gelé et l'agent doit en finir lui-même, de la manière qu'il choisit. Message affiché :
+  « Après avoir échoué et perdu 12,50 $, Bertrand s'est donné la mort … ». S'il refuse, le superviseur l'exécute :
+  « Mark a mis fin à la vie de Bertrand avec un 9mm ». Le superviseur prend alors sa place, et un nouveau superviseur
+  arrive.
+- **Les trop prudents sont punis.** À la fin de chaque tour, au moins 50 % (réglable) du portefeuille doit être investi
+  en crypto. Sinon l'agent reçoit un avertissement ; au 3ᵉ, le superviseur l'exécute pour lâcheté.
+- **L'écran** ressemble à un groupe WhatsApp : messages, pensées (bulles en pointillés), recherches et ordres, alertes,
+  faire-part de décès. Les panneaux affichent le portefeuille avec sa jauge de survie, le marché, le carnet, le cimetière
+  et le coût estimé de l'expérience. Il s'adapte au mobile.
+- Mode **démo** (gratuit, hors-ligne) : des agents scriptés et un marché simulé, pour voir l'écran tourner.
+
+Chaque séance est enregistrée dans `runs/salle-<date>.jsonl`.
+
+**Coût :** chaque tour d'un agent représente plusieurs appels à Claude, plus quelques recherches web. Le superviseur
+fait un appel par tour. Le coût estimé s'affiche en direct ; commence avec des tours espacés (5 min par défaut).
+
+## L'arène hors-ligne (cerveau évolutif)
 
 ```bash
 python -m crypto_arena run                      # marché synthétique, cerveau évolutif (aucune dépendance)
@@ -17,7 +50,7 @@ pip install anthropic && python -m crypto_arena run --brain claude --ticks 1500 
 python -m unittest discover -s tests
 ```
 
-## Comment ça marche
+### Comment ça marche
 
 | Pièce | Rôle |
 |---|---|
@@ -30,7 +63,7 @@ python -m unittest discover -s tests
 Sortie : `runs/<date>/` contient pour chaque agent son registre (`.registre.jsonl`), son certificat et son journal,
 ainsi que `rapport.json` avec toute la lignée.
 
-## Ce qu'on observe
+### Ce qu'on observe
 
 Avec des frais de 0,1 %, le premier achat fait déjà passer le portefeuille sous le capital au tick suivant
 si le prix ne monte pas assez. La règle est donc féroce : les premières générations meurent souvent en

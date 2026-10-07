@@ -31,6 +31,12 @@ def main(argv: list[str] | None = None) -> None:
     run.add_argument("--decision-every", type=int, default=24, help="mode claude : heures entre deux décisions")
     run.add_argument("--out", default="runs")
 
+    salle = sub.add_parser("salle", help="ouvrir la Salle des marchés (agents Claude, marché réel, écran de chat)")
+    salle.add_argument("--port", type=int, default=8765)
+    salle.add_argument("--host", default="127.0.0.1")
+    salle.add_argument("--carnet", default="carnet/carnet.json", help="carnet de notes transmis d'une séance à l'autre")
+    salle.add_argument("--no-browser", action="store_true")
+
     fetch = sub.add_parser("fetch", help="télécharger des clôtures Binance publiques en CSV")
     fetch.add_argument("--symbols", default="BTCUSDT,ETHUSDT,SOLUSDT,DOGEUSDT")
     fetch.add_argument("--interval", default="1h")
@@ -38,6 +44,10 @@ def main(argv: list[str] | None = None) -> None:
     fetch.add_argument("--out", default="data/binance.csv")
 
     args = parser.parse_args(argv)
+    if args.cmd == "salle":
+        from .live.server import serve
+        serve(args.host, args.port, args.carnet, "runs", open_browser=not args.no_browser)
+        return
     if args.cmd == "fetch":
         market = fetch_binance(args.symbols.split(","), args.interval, args.limit)
         market.to_csv(args.out)

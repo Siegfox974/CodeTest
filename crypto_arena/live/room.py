@@ -172,7 +172,16 @@ class TradingRoom:
         self.bus.publish("ended", trader=t.persona.to_dict(), snapshot=snap, deaths=len(self.cemetery))
 
     def run(self) -> None:
+        try:
+            self._run()
+        except Exception as e:  # tout plantage doit se voir dans le chat
+            self.bus.system(f"La séance a planté : {e.__class__.__name__}: {e}", "error")
+            self.stopping.set()
+            self.bus.publish("stopped")
+
+    def _run(self) -> None:
         s = self.settings
+        self.bus.say(SCOUT.to_dict(), f"J'interroge les bourses ({self.feed.source})… quelques secondes.", "marché")
         try:
             self.started_prices = self.feed.refresh()
         except FeedError as e:

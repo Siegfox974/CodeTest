@@ -10,7 +10,15 @@ from dataclasses import dataclass
 USER_AGENT = "crypto-arena/1.0 (paper trading)"
 
 
-def http_get(url: str, timeout: float = 10.0, headers: dict | None = None) -> object:
+def is_symbol_error(e: Exception) -> bool:
+    """Vrai si l'erreur concerne un actif précis (paire inconnue : 4xx), faux si la bourse est injoignable."""
+    code = getattr(e, "code", None)
+    if isinstance(code, int):
+        return 400 <= code < 500
+    return any(f"{c}" in str(e) for c in (400, 404))
+
+
+def http_get(url: str, timeout: float = 6.0, headers: dict | None = None) -> object:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json", **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.load(resp)
@@ -123,7 +131,9 @@ class Kraken(Exchange):
                 d = self._call("/Ticker", sym)
             except LookupError:
                 continue
-            except Exception as e:  # une paire en erreur ne doit pas faire tomber les autres
+            except Exception as e:
+                if not is_symbol_error(e):
+                    raise  # bourse injoignable : inutile d'attendre le délai pour chaque actif
                 last_error = e
                 continue
             last, opening = _f(d["c"][0]), _f(d.get("o"))
@@ -222,10 +232,10 @@ class Coinbase(Exchange):
             try:
                 d = self.get(self.url(f"/products/{sym}-USD/ticker"))
             except Exception as e:  # produit inexistant : on ne le redemandera plus
-                if "404" in str(e) or "400" in str(e):
-                    self.unsupported.add(sym)
-                else:
-                    last_error = e
+                if not is_symbol_error(e):
+                    raise
+                self.unsupported.add(sym)
+                last_error = e
                 continue
             if _f(d.get("price")):
                 out[sym] = Quote(_f(d["price"]), _f(d.get("bid")), _f(d.get("ask")))
@@ -302,9 +312,15 @@ class CustomExchange(Exchange):
             url = self.url_template.replace("{symbol}", urllib.parse.quote(pair, safe=""))
             try:
                 data = self.get(url, headers=self.headers) if self.headers else self.get(url)
-                price = _f(extract(data, self.price_path.replace("{symbol}", pair)))
             except Exception as e:
+                if not is_symbol_error(e):
+                    raise
                 last_error = e
+                continue
+            try:
+                price = _f(extract(data, self.price_path.replace("{symbol}", pair)))
+            except (KeyError, IndexError, TypeError, ValueError, StopIteration) as e:
+                last_error = LookupError(f"prix introuvable au chemin « {self.price_path} » : {e!r}")
                 continue
             if price:
                 out[sym] = Quote(price)

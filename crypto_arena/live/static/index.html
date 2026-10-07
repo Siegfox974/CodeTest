@@ -144,7 +144,7 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
     <button data-tab="salle">Salle</button><button data-tab="chat" class="on">Discussion</button><button data-tab="infos">Portefeuille & carnet</button>
   </nav>
   <aside>
-    <div class="bar"><h1 title="Salle des marchés">💹</h1><button class="btn small light" data-open-api title="Sources et API">🔌</button><button class="btn ghost" id="stop" hidden>Lever la séance</button></div>
+    <div class="bar"><h1 title="Salle des marchés">💹</h1><button class="btn small light" data-open-api title="Sources et API">API</button><button class="btn ghost" id="stop" hidden>Lever la séance</button></div>
     <div class="section">En poste</div>
     <div id="staff"><div class="empty">Personne n'a encore été embauché.</div></div>
     <div class="section">Cimetière ✝</div>
@@ -527,10 +527,16 @@ $("#startForm").onsubmit = async (ev) => {
   body.duration_hours = body.duration_choice === "custom" ? body.duration_custom : body.duration_choice;
   if (body.market === "real" && lastTest) {
     body.sources = lastTest.sources.filter((x) => x.ok).map((x) => x.name);
-    if (!body.sources.length) { $("#err").textContent = "Aucune source ne répond : ouvre 🔌 API pour en ajouter ou retester."; return; }
+    if (!body.sources.length) { $("#err").textContent = "Aucune bourse ne répond depuis ta machine. Ouvre API pour voir les erreurs, ajouter une source ou retester, ou choisis « Marché : Simulé » en attendant."; return; }
   }
-  const r = await fetch("/api/start", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
-  const data = await r.json();
+  const go = ev.target.querySelector("button.go");
+  go.disabled = true; go.textContent = "Démarrage…";
+  let r, data;
+  try {
+    r = await fetch("/api/start", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    data = await r.json();
+  } catch (e) { data = {error: "le serveur ne répond pas : " + e}; r = {ok: false}; }
+  go.disabled = false; go.textContent = "Maintenant, tu travailles !";
   if (!r.ok) { $("#err").textContent = data.error; return; }
   resetScreen();
   $("#overlay").hidden = true;

@@ -7,7 +7,7 @@ import random
 import statistics
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 
 from .exchanges import ALL_EXCHANGES, Quote, http_get
 
@@ -24,10 +24,12 @@ class MultiExchangeFeed:
     médiane des bourses qui le cotent ; une cotation qui s'en écarte de plus de `max_deviation` est ignorée."""
 
     def __init__(self, symbols: list[str] | None = None, exchanges: list | None = None, get=http_get,
-                 max_deviation: float = 0.02):
+                 max_deviation: float = 0.02, deadline: float = 8.0):
         self.symbols = symbols or list(DEFAULT_UNIVERSE)
         self.exchanges = exchanges or [cls(get) for cls in ALL_EXCHANGES]
         self.max_deviation = max_deviation
+        self.deadline = deadline                  # au-delà, une bourse est déclarée sans réponse
+        self._pending: dict[str, object] = {}     # requêtes encore en cours d'un relevé précédent
         self.prices: dict[str, float] = {}
         self.quotes: dict[str, dict[str, Quote]] = {}
         self.status: dict[str, str] = {}          # bourse -> "ok" ou message d'erreur
@@ -44,7 +46,19 @@ class MultiExchangeFeed:
             return ex.name, None, f"{e.__class__.__name__}: {e}"[:160]
 
     def refresh(self) -> dict[str, float]:
-        results = list(self._pool.map(self._fetch, self.exchanges))
+        futures = {}
+        for ex in self.exchanges:
+            previous = self._pending.get(ex.name)
+            futures[ex.name] = previous if previous is not None and not previous.done() else self._pool.submit(self._fetch, ex)
+        done, _ = wait(futures.values(), timeout=self.deadline)
+        results = []
+        for name, fut in futures.items():
+            if fut in done:
+                self._pending.pop(name, None)
+                results.append(fut.result())
+            else:
+                self._pending[name] = fut
+                results.append((name, None, f"pas de réponse en {self.deadline:.0f} s"))
         by_symbol: dict[str, dict[str, Quote]] = {s: {} for s in self.symbols}
         status = {}
         for name, quotes, state in results:

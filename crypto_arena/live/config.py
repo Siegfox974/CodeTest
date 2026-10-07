@@ -18,7 +18,7 @@ class ApiConfig:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.lock = threading.Lock()
-        data = json.loads(self.path.read_text()) if self.path.exists() else {}
+        data = json.loads(self.path.read_text(encoding="utf-8")) if self.path.exists() else {}
         self.enabled: dict[str, bool] = {n: data.get("exchanges", {}).get(n, True) for n in BUILTIN}
         self.custom: list[dict] = data.get("custom", [])
         self.anthropic_api_key: str = data.get("anthropic_api_key", "")
@@ -28,7 +28,8 @@ class ApiConfig:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps({"exchanges": self.enabled, "custom": self.custom,
-                                   "anthropic_api_key": self.anthropic_api_key}, ensure_ascii=False, indent=2))
+                                   "anthropic_api_key": self.anthropic_api_key}, ensure_ascii=False, indent=2),
+                       encoding="utf-8")
         os.chmod(tmp, 0o600)
         tmp.replace(self.path)
 

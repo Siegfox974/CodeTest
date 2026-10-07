@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from pathlib import Path
 
@@ -12,6 +13,9 @@ from .supervisor import Supervisor
 
 
 def main(argv: list[str] | None = None) -> None:
+    for stream in (sys.stdout, sys.stderr):  # consoles Windows : afficher les emojis sans planter
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(prog="crypto_arena", description="Arène darwinienne d'agents traders crypto (simulation, argent fictif).")
     sub = parser.add_subparsers(dest="cmd", required=True)
 

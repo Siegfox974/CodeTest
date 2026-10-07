@@ -21,7 +21,7 @@ class EventBus:
             event = {"id": len(self.events), "kind": kind, "ts": time.time(), **data}
             self.events.append(event)
             if self.log_path:
-                with self.log_path.open("a") as f:
+                with self.log_path.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(event, ensure_ascii=False) + "\n")
             self.cond.notify_all()
             return event

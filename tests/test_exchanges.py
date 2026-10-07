@@ -144,3 +144,35 @@ class ApiConfigTest(unittest.TestCase):
             cfg.update({"custom": [{"name": "X", "url": "https://exemple.com/prix"}]})  # pas de {symbol}
         with self.assertRaises(ValueError):
             cfg.update({"custom": [{"name": "Gate", "url": "https://x.com/{symbol}"}]})  # nom déjà pris
+
+
+class SlowNetworkTest(unittest.TestCase):
+    def test_unreachable_exchanges_fail_fast(self):
+        import time
+        calls = []
+
+        def hanging_get(url, timeout=6.0, headers=None):
+            calls.append(url)
+            time.sleep(0.3)
+            raise OSError("timed out")
+
+        feed = MultiExchangeFeed(get=hanging_get, deadline=2.0)
+        t0 = time.monotonic()
+        with self.assertRaises(FeedError):
+            feed.refresh()
+        self.assertLess(time.monotonic() - t0, 1.5)
+        kraken_calls = [u for u in calls if "kraken" in u]
+        self.assertEqual(len(kraken_calls), 1)  # pas une attente par actif
+
+    def test_too_slow_exchange_is_marked_and_others_still_count(self):
+        import time
+
+        def get(url, timeout=6.0, headers=None):
+            if "kraken" in url:
+                time.sleep(1.0)
+            return fake_get(url)
+
+        feed = MultiExchangeFeed(["BTC"], get=get, deadline=0.3)
+        prices = feed.refresh()
+        self.assertIn("BTC", prices)
+        self.assertIn("pas de réponse", feed.status["Kraken"])

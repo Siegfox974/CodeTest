@@ -51,6 +51,28 @@ versionnée dans git, et le serveur n'écoute que sur ta machine (127.0.0.1).
   « Après avoir échoué et perdu 12,50 $, Bertrand s'est donné la mort … ». S'il refuse, le superviseur l'exécute :
   « Mark a mis fin à la vie de Bertrand avec un 9mm ». Le superviseur prend alors sa place, et un nouveau superviseur
   arrive.
+- **Héritage du portefeuille** (activé par défaut, réglable) : le successeur ne repart pas de zéro. Il reprend le
+  portefeuille du mort tel quel (cash, positions, prix moyen d'achat, pertes). Il est jugé sur ce qu'il a reçu :
+  sa valeur à la reprise, moins la perte tolérée. Il dispose de son premier tour pour reprendre la main avant
+  que la règle ne s'applique. Si la lignée tombe sous 1 % du capital de départ, la séance s'arrête.
+- **Le superviseur est aux aguets** : il sait qu'il héritera de ce portefeuille. Il analyse donc chaque ordre du
+  trader dès qu'il est passé (taille par rapport à la marge, frais, actif, moment), puis fait le bilan du tour.
+- **Le Directeur, c'est toi.** Tu écris dans le chat avec la barre du bas, et tes messages sont des ordres. **Brutus 🦍,
+  ton homme de main**, les applique :
+  - « Brutus, tabasse-le maintenant » ou « défonce le superviseur » : il frappe tout de suite ;
+  - « tabasse-le s'il ne fait pas +1 % en 30 min » (ou « +2 $ », ou « s'il n'a pas de résultat dans une heure ») ;
+  - « tabasse-le s'il ne passe aucun ordre en 10 min, toutes les 10 min » ;
+  - « cogne-le à la moindre perte » ;
+  - « annule tous les contrats ».
+
+  La surveillance est du code, pas un LLM : Brutus vérifie ses contrats quatre fois par seconde et à chaque ordre
+  passé, et frappe en quelques millisecondes. Le temps de réaction est affiché. Un ordre trop tordu pour son analyse
+  locale est traduit par Claude. Le tabassé garde ses blessures (elles le suivent s'il hérite), les lit dans son
+  briefing et doit se remettre au travail immédiatement. Les contrats en cours s'affichent avec leur compte à rebours.
+- **Le guide d'investissement** (`crypto_arena/live/guide/`) est issu d'une recherche web approfondie et vérifiée :
+  coûts, taille de position quand la perte tolérée est minuscule, lecture du marché, catalyseurs, profils des
+  10 actifs, stratégies pour sessions courtes, héritage d'un portefeuille, décision sous pression, pièges. Son
+  aide-mémoire est dans le prompt de chaque agent, et le guide complet est consultable avec l'outil `lire_guide`.
 - **Les trop prudents sont punis.** À la fin de chaque tour, au moins 50 % (réglable) du portefeuille doit être investi
   en crypto. Sinon l'agent reçoit un avertissement ; au 3ᵉ, le superviseur l'exécute pour lâcheté.
 - **L'écran** ressemble à un groupe WhatsApp : messages, pensées (bulles en pointillés), recherches et ordres, alertes,

@@ -74,24 +74,13 @@ aside, .panel { background: var(--side); border-right: 1px solid var(--line); ov
   text-align: center; max-width: 520px; box-shadow: 0 6px 20px rgba(0,0,0,.35); border: 1px solid #333; }
 .death .cross { font-size: 30px; }
 .death .txt { font-size: 15.5px; margin-top: 6px; }
-.beating { flex: none; align-self: center; background: linear-gradient(135deg, #3b0d0d, #1c0606); color: #ffd7d7;
-  border: 1px solid #7a1f1f; border-radius: 12px; padding: 12px 18px; margin: 10px 0; text-align: center; max-width: 560px;
-  box-shadow: 0 4px 16px rgba(122,31,31,.35); }
-.beating .fist { font-size: 26px; }
-.beating .txt { font-size: 14.5px; margin-top: 4px; }
-.beating .why { font-size: 12px; opacity: .75; margin-top: 4px; }
 .row.out .bubble.director { background: var(--director); }
 .compose { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 10px; background: var(--header);
   border-top: 1px solid var(--line); }
-.compose .quick { display: flex; gap: 6px; flex-wrap: wrap; }
 .compose form { display: flex; gap: 8px; }
 .compose input { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border-radius: 20px; border: 1px solid var(--line);
   background: var(--app); color: var(--text); }
 .compose .send { border-radius: 50%; width: 42px; height: 42px; padding: 0; font-size: 18px; }
-.contract { border-top: 1px solid var(--line); padding: 7px 0; font-size: 13px; }
-.contract:first-child { border-top: 0; }
-.contract .head { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
-.injuries { color: #e57373; font-size: 12px; }
 .news { border-top: 1px solid var(--line); padding: 7px 0; font-size: 13px; }
 .news:first-child { border-top: 0; }
 .news a { color: var(--text); text-decoration: none; }
@@ -184,15 +173,8 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
     </div>
     <div id="feed"></div>
     <div class="compose">
-      <div class="quick">
-        <button type="button" class="chip" data-order="Brutus, tabasse-le maintenant.">🥊 Tabasse-le</button>
-        <button type="button" class="chip" data-order="Brutus, tabasse-le s'il ne fait pas +0,5 % en 15 min.">⏱ +0,5 % en 15 min, sinon…</button>
-        <button type="button" class="chip" data-order="Brutus, tabasse-le à la moindre perte.">💸 À la moindre perte</button>
-        <button type="button" class="chip" data-order="Brutus, tabasse-le s'il ne passe aucun ordre en 10 min, toutes les 10 min.">😴 S'il ne fait rien</button>
-        <button type="button" class="chip" data-order="Brutus, annule tous les contrats.">✋ Annuler les contrats</button>
-      </div>
       <form id="directorForm">
-        <input id="directorInput" autocomplete="off" placeholder="🎩 Écris en tant que Directeur… (ex. « Brutus, tabasse-le s'il ne fait pas +1 % en 30 min »)">
+        <input id="directorInput" autocomplete="off" placeholder="🎩 Écris en tant que Directeur… (ex. « Je veux +1 % avant ce soir, et coupez les memecoins »)">
         <button class="btn send" type="submit" title="Envoyer">➤</button>
       </form>
     </div>
@@ -204,8 +186,6 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
     <div class="card"><table id="market"></table><div class="kv" style="margin-top:8px"><span id="source"></span></div></div>
     <div class="section">Veille de Radar 🛰️</div>
     <div class="card" id="newsPanel"><div class="empty" style="padding:0">Radar n'a encore rien relevé.</div></div>
-    <div class="section">Ordres du directeur 🦍</div>
-    <div class="card" id="contracts"><div class="empty" style="padding:0">Aucun ordre en cours.</div></div>
     <div class="section">Carnet de la lignée</div>
     <div class="card" id="notes"><div class="empty" style="padding:0">Le carnet est vide.</div></div>
     <div class="section">Coûts de l'expérience</div>
@@ -216,7 +196,7 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
 <div class="overlay" id="overlay">
   <form class="startcard" id="startForm">
     <h2>💼 Nouveau portefeuille</h2>
-    <p>Combien confies-tu au premier trader ? Chaque successeur recevra le même montant. Portefeuille fictif.</p>
+    <p>Combien confies-tu au premier trader ? Chaque successeur héritera de son portefeuille (ou recevra le même montant si tu décoches l'héritage). Portefeuille fictif.</p>
     <label class="field">Montant confié (USDT)
       <input class="amount" name="capital" type="number" min="1" step="any" value="1000" required></label>
     <div class="grid2">
@@ -332,7 +312,8 @@ let last = -1, busId = null, roster = null, typing = {}, prevAuthor = null, poll
 
 function resetScreen() {
   if (pollCtl) pollCtl.abort();
-  last = -1; busId = null; roster = null; typing = {}; prevAuthor = null; contracts = [];
+  last = -1; busId = null; roster = null; typing = {}; prevAuthor = null; sessionEnds = null;
+  $("#timer").textContent = "⏳ —";
   $("#newsPanel").innerHTML = '<div class="empty" style="padding:0">Radar n\'a encore rien relevé.</div>';
   feed.innerHTML = "";
 }
@@ -380,11 +361,6 @@ function render(e) {
     node.className = "death";
     node.innerHTML = `<div class="cross">${e.manner === "execution" ? "🔫" : "✝"}</div><div class="txt">${esc(e.text)}</div>`;
     prevAuthor = null;
-  } else if (e.kind === "beating") {
-    node = document.createElement("div");
-    node.className = "beating";
-    node.innerHTML = `<div class="fist">🥊</div><div class="txt">${esc(e.text)}</div><div class="why">Motif : ${esc(e.reason)}</div>`;
-    prevAuthor = null;
   }
   if (node) { const stick = nearBottom(); feed.appendChild(node); if (stick) feed.scrollTop = feed.scrollHeight; }
 }
@@ -392,14 +368,13 @@ function render(e) {
 function renderRoster(r) {
   roster = r;
   $("#gen").textContent = `génération ${r.generation}`;
-  const inj = r.injuries || {};
-  $("#staff").innerHTML = [[r.trader, `trader · génération ${r.generation}`, inj.trader], [r.supervisor, "superviseur · hérite s'il meurt", inj.supervisor],
-                           [r.enforcer, "homme de main du directeur", null], [r.scout, "agent de marché · interroge les bourses", null],
+  $("#staff").innerHTML = [[r.trader, `trader · génération ${r.generation}`], [r.supervisor, r.settings.inherit ? "superviseur · hérite s'il meurt" : "superviseur · attend sa chance"],
+                           [r.scout, "agent de marché · interroge les bourses", null],
                            [r.radar, "veilleur · presse, sentiment, réseaux", null]]
     .filter(([p]) => p)
-    .map(([p, role, wounds]) => `<div class="person">${avatar(p)}<div class="who"><div class="name">${esc(p.name)}</div><div class="sub">${role}</div>${wounds && wounds.length ? `<div class="injuries" title="${esc(wounds.join(", "))}">🩹 ${wounds.length} blessure(s) : ${esc(wounds.join(", "))}</div>` : ""}<div class="sub" title="${esc(p.temperament)}">${esc(p.temperament)}</div></div></div>`).join("");
+    .map(([p, role]) => `<div class="person">${avatar(p)}<div class="who"><div class="name">${esc(p.name)}</div><div class="sub">${role}</div><div class="sub" title="${esc(p.temperament)}">${esc(p.temperament)}</div></div></div>`).join("");
   $("#cemetery").innerHTML = r.cemetery.length ? r.cemetery.slice().reverse().map((d) =>
-    `<div class="person dead">${avatar(d.persona)}<div class="who"><div class="name">✝ ${esc(d.persona.name)} <span class="badge">gén. ${d.generation}</span></div><div class="sub" title="${esc(d.cause)}">${esc(d.cause)}</div><div class="sub">perte ${usd(d.perte)} · ${d.tours} tours · ${d.duree_min} min${d.blessures && d.blessures.length ? ` · 🩹 ${d.blessures.length}` : ""}</div></div></div>`).join("")
+    `<div class="person dead">${avatar(d.persona)}<div class="who"><div class="name">✝ ${esc(d.persona.name)} <span class="badge">gén. ${d.generation}</span></div><div class="sub" title="${esc(d.cause)}">${esc(d.cause)}</div><div class="sub">perte ${usd(d.perte)} · ${d.tours} tours · ${d.duree_min} min</div></div></div>`).join("")
     : '<div class="empty">Personne, pour l\'instant.</div>';
   updateSubtitle();
 }
@@ -423,7 +398,6 @@ function renderWallet(e) {
     ${e.inherited_from ? `<div class="kv"><span>Hérité de</span><b>✝ ${esc(e.inherited_from)}</b></div>` : ""}
     <div class="kv"><span>${e.inherited_from ? "Valeur à la reprise" : "Capital confié"}</span><b>${usd(cap)}</b></div>
     ${e.initial_capital && e.inherited_from ? `<div class="kv"><span>Lignée (départ ${usd(e.initial_capital)})</span><b class="${s.valeur_totale >= e.initial_capital ? "pos" : "neg"}">${s.valeur_totale >= e.initial_capital ? "+" : ""}${usd(s.valeur_totale - e.initial_capital)}</b></div>` : ""}
-    ${e.injuries && e.injuries.length ? `<div class="kv"><span>Blessures</span><span class="injuries">🩹 ${esc(e.injuries.join(", "))}</span></div>` : ""}
     <div class="kv"><span>Seuil de mort</span><b>${usd(s.seuil_de_mort)}</b></div>
     <div class="kv"><span>Marge avant la mort</span><b class="${m >= 0 ? "pos" : "neg"}">${m >= 0 ? "+" : ""}${usd(m)}</b></div>
     <div class="meter" title="jauge de survie"><i style="width:${safety}%;background:${safety > 50 ? "var(--accent)" : safety > 20 ? "var(--warn)" : "var(--danger)"}"></i><s style="left:50%" title="capital confié"></s></div>
@@ -484,12 +458,11 @@ function handle(e) {
     case "portfolio": renderWallet(e); break;
     case "market": renderMarket(e); break;
     case "notes": renderNotes(e.notes); break;
-    case "contracts": contracts = e.contracts; contractsAt = Date.now() / 1000; renderContracts(); break;
     case "stats": renderStats(e); break;
     case "news": renderNews(e); break;
     case "typing": if (e.on) typing[e.who.name] = e.who.name; else delete typing[e.who.name]; updateSubtitle(); break;
-    case "stopped": showNewSession(); typing = {}; updateSubtitle(); break;
-    case "session": sessionEnds = e.ends_at; tickTimer(); break;
+    case "stopped": if (sessionEnds !== null) $("#timer").textContent = "⏳ arrêtée"; sessionEnds = null; showNewSession(); typing = {}; updateSubtitle(); break;
+    case "session": sessionEnds = e.ends_at; $("#timer").textContent = "⏳ ∞"; tickTimer(); break;
     case "ended": sessionEnds = null; $("#timer").textContent = "⏳ terminée"; break;
     default: render(e);
   }
@@ -508,31 +481,19 @@ async function poll() {
   }
 }
 
-let sessionEnds = null, apiCfg = null, lastTest = null, contracts = [], contractsAt = 0;
-
-function renderContracts() {
-  const shown = contracts.slice().reverse();
-  if (!shown.length) { $("#contracts").innerHTML = '<div class="empty" style="padding:0">Aucun ordre en cours.</div>'; return; }
-  const now = Date.now() / 1000;
-  $("#contracts").innerHTML = shown.map((c) => {
-    const left = c.status === "actif" && c.remaining_s != null ? Math.max(0, Math.round(c.remaining_s - (now - contractsAt))) : null;
-    const badge = {actif: "st-confirm", rempli: "", annulé: "", caduc: ""}[c.status] || "";
-    return `<div class="contract"><div class="head"><span>n°${c.id} · <span class="badge ${badge}">${esc(c.status)}</span></span>
-      <span>${left != null ? "⏳ " + (left >= 60 ? Math.floor(left / 60) + " min " + String(left % 60).padStart(2, "0") + " s" : left + " s") : ""}${c.beatings ? ` · 🥊 ×${c.beatings}` : ""}</span></div>
-      ${esc(c.description)}</div>`;
-  }).join("");
-}
-setInterval(() => { if (contracts.some((c) => c.status === "actif" && c.remaining_s != null)) renderContracts(); }, 1000);
+let sessionEnds = null, apiCfg = null, lastTest = null;
 
 async function sendDirector(text) {
   if (!text.trim()) return;
-  const r = await fetch("/api/director", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})});
-  if (!r.ok) { const d = await r.json(); alert(d.error); return false; }
-  return true;
+  try {
+    const r = await fetch("/api/director", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})});
+    if (!r.ok) { const d = await r.json(); alert(d.error); return false; }
+    return true;
+  } catch (e) { alert("Message non envoyé : le serveur ne répond pas."); return false; }
 }
 
 function tickTimer() {
-  if (sessionEnds === null || sessionEnds === undefined) { if ($("#timer").textContent !== "⏳ terminée") $("#timer").textContent = "⏳ ∞"; return; }
+  if (sessionEnds === null || sessionEnds === undefined) return;   // illimitée, terminée ou arrêtée : texte fixe
   const left = Math.max(0, Math.round(sessionEnds - Date.now() / 1000));
   const d = Math.floor(left / 86400), h = Math.floor(left % 86400 / 3600), m = Math.floor(left % 3600 / 60), sec = left % 60;
   $("#timer").textContent = "⏳ " + (d ? `${d} j ${h} h` : h ? `${h} h ${String(m).padStart(2, "0")} min` : `${m} min ${String(sec).padStart(2, "0")} s`);
@@ -672,10 +633,6 @@ $("#directorForm").onsubmit = async (ev) => {
   ev.preventDefault();
   const input = $("#directorInput");
   if (await sendDirector(input.value)) input.value = "";
-};
-document.querySelector(".compose .quick").onclick = (ev) => {
-  const order = ev.target.dataset.order;
-  if (order) sendDirector(order);
 };
 $("#lossChips").onclick = (ev) => { if (ev.target.dataset.loss !== undefined) document.querySelector('[name="max_loss"]').value = ev.target.dataset.loss; };
 document.querySelector('[name="duration_choice"]').onchange = (ev) => { $("#customDuration").hidden = ev.target.value !== "custom"; };

@@ -66,22 +66,13 @@ versionnée dans git, et le serveur n'écoute que sur ta machine (127.0.0.1).
   arrive.
 - **Héritage du portefeuille** (activé par défaut, réglable) : le successeur ne repart pas de zéro. Il reprend le
   portefeuille du mort tel quel (cash, positions, prix moyen d'achat, pertes). Il est jugé sur ce qu'il a reçu :
-  sa valeur à la reprise, moins la perte tolérée. Il dispose de son premier tour pour reprendre la main avant
-  que la règle ne s'applique. Si la lignée tombe sous 1 % du capital de départ, la séance s'arrête.
+  sa valeur à la reprise, moins la perte tolérée. Il dispose de son premier tour, jusqu'à sa fin, pour reprendre la
+  main avant que la règle ne s'applique. Si la lignée tombe sous 1 % du capital de départ, ou sous la perte tolérée,
+  la séance s'arrête.
 - **Le superviseur est aux aguets** : il sait qu'il héritera de ce portefeuille. Il analyse donc chaque ordre du
   trader dès qu'il est passé (taille par rapport à la marge, frais, actif, moment), puis fait le bilan du tour.
-- **Le Directeur, c'est toi.** Tu écris dans le chat avec la barre du bas, et tes messages sont des ordres. **Brutus 🦍,
-  ton homme de main**, les applique :
-  - « Brutus, tabasse-le maintenant » ou « défonce le superviseur » : il frappe tout de suite ;
-  - « tabasse-le s'il ne fait pas +1 % en 30 min » (ou « +2 $ », ou « s'il n'a pas de résultat dans une heure ») ;
-  - « tabasse-le s'il ne passe aucun ordre en 10 min, toutes les 10 min » ;
-  - « cogne-le à la moindre perte » ;
-  - « annule tous les contrats ».
-
-  La surveillance est du code, pas un LLM : Brutus vérifie ses contrats quatre fois par seconde et à chaque ordre
-  passé, et frappe en quelques millisecondes. Le temps de réaction est affiché. Un ordre trop tordu pour son analyse
-  locale est traduit par Claude. Le tabassé garde ses blessures (elles le suivent s'il hérite), les lit dans son
-  briefing et doit se remettre au travail immédiatement. Les contrats en cours s'affichent avec leur compte à rebours.
+- **Le Directeur, c'est toi.** Tu écris dans le chat avec la barre du bas. Tes messages sont des ordres que le trader et
+  le superviseur lisent dans leur briefing suivant. Ils n'entraînent aucun appel supplémentaire à Claude.
 - **Le guide d'investissement** (`crypto_arena/live/guide/`) est issu d'une recherche web approfondie et vérifiée :
   coûts, taille de position quand la perte tolérée est minuscule, lecture du marché, catalyseurs, profils des
   10 actifs, stratégies pour sessions courtes, héritage d'un portefeuille, décision sous pression, pièges. Son

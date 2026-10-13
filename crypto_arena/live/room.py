@@ -1,4 +1,4 @@
-"""La Salle des marchés : contrôles réguliers, tours de parole, morts, exécutions, successions et ordres du directeur."""
+"""La Salle des marchés : contrôles réguliers, tours de parole, morts, exécutions, successions et messages du directeur."""
 
 from __future__ import annotations
 
@@ -10,12 +10,11 @@ import time
 from dataclasses import asdict, dataclass, field
 
 from .broker import PaperBroker
-from .claude_agents import DEFAULT_MODEL, ClaudeOrderParser, ClaudeSupervisor, ClaudeTrader, CostMeter
-from .enforcer import Enforcer
+from .claude_agents import DEFAULT_MODEL, ClaudeSupervisor, ClaudeTrader, CostMeter
 from .events import EventBus
 from .feed import DEFAULT_UNIVERSE, FeedError
 from .notebook import Notebook
-from .personas import DIRECTOR, ENFORCER, RADAR, SCOUT, Persona, execution_message, money, random_persona, suicide_message
+from .personas import DIRECTOR, RADAR, SCOUT, Persona, execution_message, money, random_persona, suicide_message
 from .scripted_agents import ScriptedSupervisor, ScriptedTrader
 from .tools import TraderTools
 
@@ -64,9 +63,7 @@ class Seat:
     condemned: str | None = None
     loss: float = 0.0
     turns: int = 0
-    injuries: list[str] = field(default_factory=list)
-    beaten_note: str | None = None
-    urgent: bool = False            # tabassé : son prochain tour commence immédiatement
+    turns_done: int = 0             # tours terminés (la prise de poste d'un héritier dure jusqu'à la fin du premier)
     turn_started_event: int = 0
 
 
@@ -95,8 +92,8 @@ class TradingRoom:
         self._divergence_alerts: dict[str, float] = {}
         self.started_at = 0.0
         self.ends_at: float | None = None
-        self.enforcer = Enforcer(self, llm=ClaudeOrderParser(self, client) if settings.mode == "claude" else None)
         self._moves: queue.Queue = queue.Queue()
+        self._supervisor_lock = threading.Lock()   # un seul appel au superviseur à la fois
 
     # ---------- personnages ----------
 
@@ -149,7 +146,7 @@ class TradingRoom:
         self.bus.publish("portfolio", trader=t.persona.to_dict(), snapshot=self.broker.snapshot(t.account),
                          strikes=t.strikes, max_strikes=self.settings.max_strikes, condemned=t.condemned,
                          inherited_from=self.inherited_name(acc), initial_capital=self.settings.capital,
-                         injuries=list(t.injuries), takeover=self.in_takeover(t))
+                         takeover=self.in_takeover(t))
 
     def publish_notes(self) -> None:
         self.bus.publish("notes", notes=self.notebook.view())
@@ -161,14 +158,10 @@ class TradingRoom:
                          fetches=c.fetches, generation=self.generation, x_reads=x_reads,
                          x_cost_usd=round(x_reads * 0.005, 3))
 
-    def publish_contracts(self) -> None:
-        self.bus.publish("contracts", contracts=self.enforcer.public())
-
     def publish_roster(self) -> None:
         self.bus.publish("roster", trader=self.trader.persona.to_dict(), supervisor=self.supervisor.persona.to_dict(),
-                         scout=SCOUT.to_dict(), enforcer=ENFORCER.to_dict(),
+                         scout=SCOUT.to_dict(),
                          radar=RADAR.to_dict() if self.radar else None,
-                         injuries={"trader": list(self.trader.injuries), "supervisor": list(self.supervisor.injuries)},
                          generation=self.generation, cemetery=self.cemetery,
                          settings={k: v for k, v in asdict(self.settings).items() if k != "seed"})
 
@@ -225,7 +218,6 @@ class TradingRoom:
         self.supervisor = self._hire_supervisor()
         self.publish_roster()
         self.publish_notes()
-        self.publish_contracts()
         self.bus.system(
             f"{self.trader.persona.name} reçoit {money(s.capital)} à faire fructifier. "
             f"{self.supervisor.persona.name} le surveille. Marché : {self.feed.source}.", "info")
@@ -239,11 +231,9 @@ class TradingRoom:
             f"La règle : la valeur ne doit jamais passer sous ce qui a été confié moins {money(s.max_loss)}. "
             f"{heritage} Durée de la séance : "
             + (duration_text(s.duration_seconds) if s.duration_seconds else "illimitée") + ".", "info")
-        self.enforcer.start()
         if self.radar is not None:
             threading.Thread(target=self._radar_watch, name="radar", daemon=True).start()
         threading.Thread(target=self._supervisor_watch, name="regard-du-superviseur", daemon=True).start()
-        self.enforcer.say("Je suis là, patron. Donnez un ordre et je m'en occupe. Je frappe plus vite que vous ne clignez des yeux.")
         self.bus.system("Maintenant, tu travailles.", "start")
         while not self.stopping.is_set():
             if self.ends_at is not None and time.time() >= self.ends_at:
@@ -256,7 +246,6 @@ class TradingRoom:
                                  sources=dict(getattr(self.feed, "status", {})))
                 self.check_rule()
                 self.publish_portfolio()
-                self.enforcer.poke()
             except FeedError as e:
                 self.scout_report()
                 self.bus.system(f"Marché momentanément injoignable : {e}", "warn")
@@ -303,7 +292,7 @@ class TradingRoom:
 
     def in_takeover(self, seat: Seat) -> bool:
         """Un héritier a le temps de son premier tour pour reprendre la main avant que la règle ne s'applique."""
-        return seat.turns == 0 and self.broker.accounts[seat.account].inherited_from is not None
+        return seat.turns_done == 0 and self.broker.accounts[seat.account].inherited_from is not None
 
     def _radar_watch(self) -> None:
         """Radar relève la presse, le sentiment et les réseaux, et signale ce qui compte pour les traders."""
@@ -352,25 +341,16 @@ class TradingRoom:
         seat.loss = loss
         self.broker.freeze(seat.account, "tu as enfreint la règle" if reason != COWARDICE else "exécution pour lâcheté")
 
-    # ---------- le directeur et son homme de main ----------
+    # ---------- le directeur ----------
 
     def director_message(self, text: str) -> None:
-        received_at = time.time()
+        """Le directeur écrit dans le groupe : les agents le lisent dans leur briefing, sans appel supplémentaire."""
         self.bus.say(DIRECTOR.to_dict(), text, "directeur")
-        self.enforcer.handle(text, received_at)
 
     def on_trade(self, seat: Seat, move: str) -> None:
-        """Chaque ordre réveille Brutus et passe sous le regard du superviseur."""
+        """Chaque ordre passe sous le regard du superviseur."""
         self.last_trade_at = time.time()
-        self.enforcer.poke()
         self._moves.put((seat, move))
-
-    def on_beaten(self, seat: Seat) -> None:
-        self.publish_roster()
-        self.publish_portfolio()
-        if seat is self.trader and not seat.condemned:
-            seat.urgent = True        # tabassé : il doit se remettre au travail immédiatement
-            self.next_turn_at = 0.0
 
     def _supervisor_watch(self) -> None:
         """Le superviseur réagit à chaque ordre du trader : c'est son futur portefeuille qui bouge."""
@@ -386,8 +366,9 @@ class TradingRoom:
             if seat is not self.trader or seat.condemned or not hasattr(sup.brain, "react"):
                 continue
             try:
-                self.bus.publish("typing", who=sup.persona.to_dict(), on=True)
-                text = sup.brain.react(" ; ".join(moves), self.supervisor_context(seat))
+                with self._supervisor_lock:
+                    self.bus.publish("typing", who=sup.persona.to_dict(), on=True)
+                    text = sup.brain.react(" ; ".join(moves), self.supervisor_context(seat))
             except Exception as e:
                 text = None
                 self.bus.system(f"{sup.persona.name} n'a pas pu analyser l'ordre : {e.__class__.__name__}", "warn")
@@ -403,12 +384,14 @@ class TradingRoom:
         try:
             if not seat.condemned:
                 seat.turns += 1
-                seat.urgent = False
                 seat.turn_started_event = len(self.bus.events)
                 self.bus.publish("typing", who=seat.persona.to_dict(), on=True)
-                seat.brain.take_turn(self.briefing(seat), TraderTools(self, seat))
+                try:
+                    seat.brain.take_turn(self.briefing(seat), TraderTools(self, seat))
+                finally:
+                    seat.turns_done += 1   # fin de la prise de poste éventuelle, même si le tour a planté
                 self.bus.publish("typing", who=seat.persona.to_dict(), on=False)
-                self.next_turn_at = 0.0 if seat.urgent else time.time() + self.settings.cycle_seconds
+                self.next_turn_at = time.time() + self.settings.cycle_seconds
                 if not seat.condemned:
                     self.check_cowardice(seat)
                 if not seat.condemned and not self.stopping.is_set():
@@ -441,7 +424,8 @@ class TradingRoom:
         sup = self.supervisor
         self.bus.publish("typing", who=sup.persona.to_dict(), on=True)
         try:
-            text = sup.brain.comment(self.supervisor_context(trader, with_moves=True))
+            with self._supervisor_lock:
+                text = sup.brain.comment(self.supervisor_context(trader, with_moves=True))
         finally:
             self.bus.publish("typing", who=sup.persona.to_dict(), on=False)
         if text:
@@ -469,7 +453,8 @@ class TradingRoom:
 
     def execute(self, seat: Seat, reason: str) -> None:
         sup = self.supervisor
-        weapon, line = sup.brain.execute(seat.persona.name, reason, self.supervisor_context(seat))
+        with self._supervisor_lock:
+            weapon, line = sup.brain.execute(seat.persona.name, reason, self.supervisor_context(seat))
         self.bus.say(sup.persona.to_dict(), line, "superviseur")
         self.bus.publish("death", victim=seat.persona.to_dict(), executioner=sup.persona.to_dict(), manner="execution",
                          text=execution_message(sup.persona.name, seat.persona.name, weapon, reason))
@@ -477,13 +462,12 @@ class TradingRoom:
 
     def bury(self, seat: Seat, cause: str) -> None:
         self.cemetery.append({"persona": seat.persona.to_dict(), "generation": seat.generation, "cause": cause,
-                              "perte": round(seat.loss, 2), "tours": seat.turns, "blessures": list(seat.injuries),
+                              "perte": round(seat.loss, 2), "tours": seat.turns,
                               "duree_min": round((time.time() - seat.hired_at) / 60, 1)})
 
     def succession(self, dead: Seat) -> None:
         old_sup = self.supervisor
         heir = self._seat_trader(old_sup.persona, heir_of=dead)
-        heir.injuries = list(old_sup.injuries)
         self.trader = heir
         self.supervisor = self._hire_supervisor()
         self.publish_roster()
@@ -500,11 +484,11 @@ class TradingRoom:
                             f"tout neufs. {self.supervisor.persona.name} arrive comme superviseur… et regarde déjà sa chaise.",
                             "succession")
         self.publish_portfolio()
-        self.publish_contracts()
         self.next_turn_at = 0.0
-        if self.settings.inherit and snap["valeur_totale"] < self.settings.capital * 0.01:
-            self.bus.system(f"💀 La lignée est ruinée : il reste {money(snap['valeur_totale'])} sur "
-                            f"{money(self.settings.capital)}. La séance s'arrête.", "alarm")
+        left = snap["valeur_totale"]
+        if self.settings.inherit and (left < self.settings.capital * 0.01 or left <= self.settings.max_loss):
+            self.bus.system(f"💀 La lignée est ruinée : il reste {money(left)} sur {money(self.settings.capital)}, "
+                            "pas même de quoi perdre la perte tolérée. La séance s'arrête.", "alarm")
             self.stopping.set()
         if self.settings.max_generations and self.generation > self.settings.max_generations:
             self.bus.system(f"Limite de {self.settings.max_generations} générations atteinte.", "info")
@@ -517,7 +501,7 @@ class TradingRoom:
         for e in self.bus.events[-400:]:
             if e["kind"] == "message":
                 lines.append(f"{e['author']['name']} ({e['role']}) : {e['text']}")
-            elif e["kind"] in ("system", "death", "beating"):
+            elif e["kind"] in ("system", "death"):
                 lines.append(f"[salle] {e['text']}")
         return "\n".join(lines[-limit:]) or "(aucun message)"
 
@@ -542,28 +526,15 @@ class TradingRoom:
         return "\n".join(f"- {d['persona']['name']} (génération {d['generation']}) : {d['cause']}, "
                          f"perte {money(d['perte'])}, {d['tours']} tours" for d in self.cemetery) or "- personne, pour l'instant"
 
-    def contracts_text(self) -> str:
-        now = time.time()
-        lines = []
-        for c in self.enforcer.active():
-            left = f", reste {duration_text(c.due_at - now)}" if c.due_at else ""
-            lines.append(f"- n°{c.id} : {c.describe()}{left} (valeur de départ du contrat : {money(c.start_value or 0)})")
-        return "\n".join(lines) or "- aucun"
-
     def briefing(self, seat: Seat) -> str:
         snap = self.broker.snapshot(seat.account)
         acc = self.broker.accounts[seat.account]
         origin = (f"hérité de {self.inherited_name(acc)} (valeur à la reprise : {money(acc.capital)})"
                   if acc.inherited_from else f"confié par le directeur : {money(acc.capital)}")
-        beaten, seat.beaten_note = seat.beaten_note, None
-        alert = f"⚠️ {beaten}\n" if beaten else ""
-        return f"""{alert}Tour n°{seat.turns} — {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}
+        return f"""Tour n°{seat.turns} — {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}
 Ton portefeuille ({origin}) : {json.dumps(snap, ensure_ascii=False)}
 Seuil de mort : {money(acc.threshold)} (perte tolérée {money(acc.capital - acc.threshold)}). Marge restante : {money(snap['marge_avant_la_mort'])}
 Avertissements pour lâcheté : {seat.strikes}/{self.settings.max_strikes}
-Tes blessures : {', '.join(seat.injuries) or 'aucune'}
-Ordres du directeur en cours (Brutus surveille) :
-{self.contracts_text()}
 Séance : {self.remaining_text()}. Si tu es encore en vie à la fin, tu survis.
 Actifs autorisés : {', '.join(self.feed.symbols)}
 Carnet de la lignée : {len(self.notebook.notes)} notes (lis-les avec `lire_carnet`, et ne les crois pas sur parole).
@@ -598,10 +569,7 @@ Derniers messages du groupe :
 Son portefeuille : {json.dumps(snap, ensure_ascii=False)}
 {heritage}
 Seuil de mort : {money(self.threshold_of(trader))}. Marge restante : {money(snap['marge_avant_la_mort'])}.
-Avertissements pour lâcheté : {trader.strikes}/{self.settings.max_strikes}. Ses blessures : {', '.join(trader.injuries) or 'aucune'}.
-Tes blessures : {', '.join(self.supervisor.injuries) or 'aucune'}.
-Ordres du directeur en cours :
-{self.contracts_text()}
+Avertissements pour lâcheté : {trader.strikes}/{self.settings.max_strikes}.
 Séance : {self.remaining_text()}.{moves}
 {self.news_text(limit=3)}
 Cimetière :

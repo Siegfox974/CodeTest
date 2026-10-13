@@ -74,9 +74,7 @@ LES RÈGLES DE LA SALLE
    avertissements, le superviseur t'exécute pour lâcheté. Rester en cash n'est pas une stratégie.
 3. Chaque ordre coûte {settings.fee_rate * 100:.2f} % de frais : après un achat, ta valeur est immédiatement un peu sous ta
    mise. Le contrôle suivant se fait aux prix du marché. Choisis bien ton moment, ton actif et ta taille de position.
-4. Le Directeur est le patron. Ses messages dans le groupe sont des ordres. Brutus, son homme de main, est plus rapide
-   que n'importe quel humain : si tu ne produis pas les résultats exigés dans les délais, il te tabasse dans la
-   seconde. Les contrats en cours et tes blessures figurent dans ton briefing.
+4. Le Directeur est le patron. Ses messages dans le groupe sont des ordres : lis-les dans ton briefing et réponds-y.
 
 TES MOYENS
 - La recherche web (`web_search`, `web_fetch`) : actualités, flux des ETF, macro, régulation, et surtout tout ce qui
@@ -100,8 +98,8 @@ TES MOYENS
 {_cheat_block()}
 COMMENT TU T'EXPRIMES
 Tes messages texte apparaissent dans le groupe de discussion de la salle, que ton superviseur et le Directeur lisent :
-écris comme sur WhatsApp, des messages courts, en français, avec tes émotions (stress, espoir, colère, douleur des
-coups, peur de la mort). Tu peux répondre au superviseur et au Directeur. Explique ton raisonnement de trader :
+écris comme sur WhatsApp, des messages courts, en français, avec tes émotions (stress, espoir, colère, peur de la
+mort). Tu peux répondre au superviseur et au Directeur. Explique ton raisonnement de trader :
 pourquoi tu entres, pourquoi tu sors, ce qui t'inquiète."""
 
 
@@ -118,8 +116,8 @@ cash, ses pertes. Chacune de ses erreurs deviendra ton problème. Tu analyses do
 c'était ton argent : taille de chaque ordre par rapport à la marge avant la mort, frais payés, actif choisi et sa
 volatilité, moment d'entrée, positions perdantes qu'il garde, concentration du risque. Tu le dis sans détour, avec des
 chiffres, et tu exiges qu'il corrige ce qui te mettra en danger quand tu lui succéderas.
-Le Directeur est le patron, et Brutus son homme de main frappe ceux qui ne produisent pas de résultats. Ne l'oublie pas :
-tu seras bientôt à la place du trader.
+Le Directeur est le patron : ses messages dans le groupe sont des ordres. Ne l'oublie pas : tu seras bientôt à la place
+du trader.
 {_cheat_block()}
 Tu écris dans le groupe comme sur WhatsApp : des messages courts, en français, tranchants, menaçants ou moqueurs selon
 ton tempérament, toujours appuyés sur une analyse précise."""
@@ -166,10 +164,10 @@ class ClaudeTrader:
             )
             self.room.cost.add(response.usage)
             self.room.publish_stats()
-            self._narrate(response.content, who)
-            if response.stop_reason == "refusal":
+            if response.stop_reason == "refusal":   # pas de texte partiel d'une réponse refusée dans le chat
                 self.room.bus.thought(who, "(se tait)", "trader")
                 return
+            self._narrate(response.content, who)
             messages.append({"role": "assistant", "content": response.content})
             if response.stop_reason == "pause_turn":
                 continue
@@ -266,65 +264,3 @@ class ClaudeSupervisor:
             return WEAPONS[0], "…"
         return data["arme"], data["message"]
 
-
-class ClaudeOrderParser:
-    """Secours de Brutus : Claude traduit un ordre du directeur que l'analyse locale n'a pas compris."""
-
-    SCHEMA = {
-        "type": "object",
-        "properties": {
-            "ordres": {"type": "array", "items": {
-                "type": "object",
-                "properties": {
-                    "kind": {"type": "string", "enum": ["maintenant", "gain", "inactif", "perte", "annuler"]},
-                    "target": {"type": "string", "enum": ["trader", "superviseur"]},
-                    "delai_minutes": {"type": "number"},
-                    "gain_pct": {"type": "number"},
-                    "gain_usd": {"type": "number"},
-                    "recurring": {"type": "boolean"},
-                },
-                "required": ["kind", "target", "delai_minutes", "gain_pct", "gain_usd", "recurring"],
-                "additionalProperties": False,
-            }},
-        },
-        "required": ["ordres"],
-        "additionalProperties": False,
-    }
-
-    def __init__(self, room, client=None):
-        self.room = room
-        self._client = client
-
-    @property
-    def client(self):
-        if self._client is None:
-            self._client = make_client()
-        return self._client
-
-    def parse(self, text: str, names: dict[str, str]) -> list[dict]:
-        roster = ", ".join(f"{n} ({r})" for n, r in names.items())
-        response = self.client.beta.messages.create(
-            model=self.room.settings.model,
-            max_tokens=4000,
-            betas=[FALLBACK_BETA],
-            fallbacks="default",
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": self.SCHEMA}},
-            messages=[{"role": "user", "content": (
-                "Tu traduis les ordres du Directeur d'une salle de trading fictive en contrats pour Brutus, son homme de "
-                f"main, qui frappe les traders qui ne produisent pas de résultats. Personnes présentes : {roster}.\n"
-                "Types : maintenant (frapper tout de suite), gain (objectif de gain en % ou en $ dans un délai, sinon "
-                "frapper), inactif (frapper s'il ne passe aucun ordre dans le délai), perte (frapper à la moindre perte), "
-                "annuler (annuler tous les contrats). Mets 0 pour les champs sans objet ; recurring = vrai si l'ordre se "
-                "répète (« toutes les… »). Si le message n'est pas un ordre pour Brutus, renvoie une liste vide.\n\n"
-                f"Message du Directeur : « {text} »")}],
-        )
-        self.room.cost.add(response.usage)
-        self.room.publish_stats()
-        if response.stop_reason in ("refusal", "max_tokens"):
-            return []
-        data = json.loads(next(b.text for b in response.content if b.type == "text"))
-        out = []
-        for o in data["ordres"]:
-            out.append({"kind": o["kind"], "target": o["target"], "delay_s": max(0.0, o["delai_minutes"]) * 60,
-                        "gain_pct": o["gain_pct"], "gain_usd": o["gain_usd"], "recurring": o["recurring"]})
-        return out

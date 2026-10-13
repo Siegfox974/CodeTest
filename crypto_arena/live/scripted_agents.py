@@ -53,8 +53,6 @@ class ScriptedTrader:
             else:
                 room.bus.say(who, rng.choice(REFUSALS), "trader")
             return
-        if tools.seat.injuries and rng.random() < 0.5:
-            room.bus.say(who, f"J'ai {tools.seat.injuries[-1]}… mais je trade. Je trade !", "trader")
         sym = rng.choice(room.feed.symbols)
         notes = room.notebook.view()
         fmt = {"sym": sym, "sup": room.supervisor.persona.name, "note": notes[-1]["id"] if notes else 1}

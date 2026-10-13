@@ -40,6 +40,19 @@ versionnée dans git, et le serveur n'écoute que sur ta machine (127.0.0.1).
   à chaque contrôle. Le prix retenu est la médiane des bourses qui répondent ; une cotation qui s'en écarte de plus de 2 %
   est écartée. Scout signale dans le chat les bourses qui tombent ou reviennent, et les écarts de prix de plus de 1 %.
   Les traders disposent de `consulter_marche`, `comparer_bourses`, `carnet_ordres` (profondeur réelle) et `bougies`.
+- **La veille en temps réel : Radar 🛰️.** Comme Scout, c'est du code et non un agent Claude. Il lit toutes les minutes
+  la presse crypto par flux RSS : CoinDesk, Cointelegraph, Decrypt, The Block et Bitcoin Magazine. Tu peux ajouter
+  tes propres flux. Il relève aussi l'indice Fear & Greed, les cryptos tendance sur CoinGecko, les taux de financement
+  des contrats perpétuels et les sujets les plus votés de r/CryptoCurrency. Il signale dans le chat les nouvelles qui
+  comptent (actif suivi, ETF, Fed, piratage, liquidations…) et met les derniers titres, avec leurs liens, dans le
+  briefing de chaque trader : `web_fetch` peut alors lire l'article complet. Les traders disposent des outils
+  `actualites` et `sentiment_marche`.
+- **X / Twitter (optionnel).** L'API de X est payante à l'usage, sans formule gratuite pour les nouveaux comptes.
+  Compte environ 0,005 $ par tweet lu (tarif rapporté par des sources non officielles : vérifie dans ta console
+  développeur X). Colle ta clé « Bearer token » dans le menu API : Radar surveille alors une requête X (réglable, toutes
+  les 5 min par défaut) et les traders peuvent chercher en direct avec `chercher_sur_x`. Les tweets lus et leur coût
+  estimé s'affichent dans les coûts de l'expérience. Sans clé, les traders passent par la recherche web
+  (`site:x.com`).
 - **Diagnostic :** `python -m crypto_arena marche` interroge chaque bourse depuis ta machine et affiche les prix de
   consensus, une bougie et le carnet d'ordres BTC. Lance-le avant ta première séance.
 - **Le carnet de la lignée** (`carnet/carnet.json`) est conservé d'une séance à l'autre. Chaque agent y laisse des notes

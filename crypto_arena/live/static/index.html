@@ -92,6 +92,14 @@ aside, .panel { background: var(--side); border-right: 1px solid var(--line); ov
 .contract:first-child { border-top: 0; }
 .contract .head { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
 .injuries { color: #e57373; font-size: 12px; }
+.news { border-top: 1px solid var(--line); padding: 7px 0; font-size: 13px; }
+.news:first-child { border-top: 0; }
+.news a { color: var(--text); text-decoration: none; }
+.news a:hover { color: var(--accent); }
+.news .head { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11.5px; margin-bottom: 2px; flex-wrap: wrap; }
+.fg { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.fg .big { font-size: 22px; }
+.bubble a.lnk { color: var(--accent); overflow-wrap: anywhere; }
 .card { margin: 12px 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; }
 .big { font-size: 26px; font-weight: 700; }
 .kv { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; margin: 3px 0; }
@@ -194,6 +202,8 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
     <div class="card" id="wallet"><div class="empty" style="padding:0">Aucun portefeuille pour l'instant.</div></div>
     <div class="section">Marché</div>
     <div class="card"><table id="market"></table><div class="kv" style="margin-top:8px"><span id="source"></span></div></div>
+    <div class="section">Veille de Radar 🛰️</div>
+    <div class="card" id="newsPanel"><div class="empty" style="padding:0">Radar n'a encore rien relevé.</div></div>
     <div class="section">Ordres du directeur 🦍</div>
     <div class="card" id="contracts"><div class="empty" style="padding:0">Aucun ordre en cours.</div></div>
     <div class="section">Carnet de la lignée</div>
@@ -286,6 +296,27 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
         * pour le premier élément. Exemples : <code>price</code>, <code>data.0.last</code>, <code>result.*.c.0</code>.</div>
       <button type="button" class="btn small" id="cAdd" style="margin-top:8px">Ajouter et tester</button>
     </details>
+    <h3>Veille : actualités et réseaux (Radar)</h3>
+    <label class="src" style="border:0"><input type="checkbox" id="newsOn"><b>Activer Radar</b><span class="st">lit les sources toutes les minutes</span></label>
+    <label class="src"><input type="checkbox" id="newsSentiment"><b>Sentiment du marché</b><span class="st" id="stSentiment">Fear & Greed, financement, tendances</span></label>
+    <label class="src"><input type="checkbox" id="newsReddit"><b>Reddit r/CryptoCurrency</b><span class="st" id="stReddit"></span></label>
+    <div id="feedList"></div>
+    <details class="add"><summary>➕ Ajouter un flux RSS</summary>
+      <div class="grid2">
+        <label class="field">Nom<input id="fName" placeholder="CryptoSlate"></label>
+        <label class="field">URL du flux<input id="fUrl" placeholder="https://cryptoslate.com/feed/"></label>
+      </div>
+      <button type="button" class="btn small" id="fAdd">Ajouter et tester</button>
+    </details>
+    <div class="src" style="border-top:1px solid var(--line)"><span>🐦</span>
+      <input id="xToken" type="password" autocomplete="off" placeholder="Clé X (Bearer token) : optionnelle, payante à l'usage"
+        style="font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--app);color:var(--text);min-width:0">
+      <button type="button" class="btn small light" id="xClear">Effacer</button></div>
+    <div class="grid2">
+      <label class="field">Requête X surveillée<input id="xQuery"></label>
+      <label class="field">Interroger X toutes les (min)<input id="xEvery" type="number" min="1" step="1"></label>
+    </div>
+    <div class="hint" id="xStatus"></div>
     <div class="err" id="apiErr"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button type="button" class="btn" id="apiSave">Enregistrer</button>
@@ -302,11 +333,15 @@ let last = -1, busId = null, roster = null, typing = {}, prevAuthor = null, poll
 function resetScreen() {
   if (pollCtl) pollCtl.abort();
   last = -1; busId = null; roster = null; typing = {}; prevAuthor = null; contracts = [];
+  $("#newsPanel").innerHTML = '<div class="empty" style="padding:0">Radar n\'a encore rien relevé.</div>';
   feed.innerHTML = "";
 }
 
+const safeUrl = (u) => /^https?:\/\//i.test(String(u || "")) ? u : "#";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
+const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+  .replace(/https?:\/\/[^\s<]+/g, (u) => `<a class="lnk" href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`)
+  .replace(/\n/g, "<br>");
 const hhmm = (ts) => new Date(ts * 1000).toLocaleTimeString("fr-FR", {hour: "2-digit", minute: "2-digit"});
 const usd = (v) => (v ?? 0).toLocaleString("fr-FR", {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " $";
 const px = (v) => v >= 1 ? v.toLocaleString("fr-FR", {maximumFractionDigits: 2}) : v.toPrecision(4);
@@ -333,7 +368,7 @@ function render(e) {
     if (b) b.onclick = () => { const t = node.querySelector(".thought"); t.classList.toggle("open"); b.textContent = t.classList.contains("open") ? "réduire" : "voir toute la pensée"; };
   } else if (e.kind === "action") {
     const links = Array.isArray(e.detail) && e.detail.length && e.detail[0].url
-      ? e.detail.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">↗ ${esc(l.titre || l.url)}</a>`).join("") : "";
+      ? e.detail.map((l) => `<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener noreferrer">↗ ${esc(l.titre || l.url)}</a>`).join("") : "";
     node = bubble(e, "action", `${e.icon} ${esc(e.text)}${links}`);
   } else if (e.kind === "system") {
     node = document.createElement("div");
@@ -359,7 +394,8 @@ function renderRoster(r) {
   $("#gen").textContent = `génération ${r.generation}`;
   const inj = r.injuries || {};
   $("#staff").innerHTML = [[r.trader, `trader · génération ${r.generation}`, inj.trader], [r.supervisor, "superviseur · hérite s'il meurt", inj.supervisor],
-                           [r.enforcer, "homme de main du directeur", null], [r.scout, "agent de marché · interroge les bourses", null]]
+                           [r.enforcer, "homme de main du directeur", null], [r.scout, "agent de marché · interroge les bourses", null],
+                           [r.radar, "veilleur · presse, sentiment, réseaux", null]]
     .filter(([p]) => p)
     .map(([p, role, wounds]) => `<div class="person">${avatar(p)}<div class="who"><div class="name">${esc(p.name)}</div><div class="sub">${role}</div>${wounds && wounds.length ? `<div class="injuries" title="${esc(wounds.join(", "))}">🩹 ${wounds.length} blessure(s) : ${esc(wounds.join(", "))}</div>` : ""}<div class="sub" title="${esc(p.temperament)}">${esc(p.temperament)}</div></div></div>`).join("");
   $("#cemetery").innerHTML = r.cemetery.length ? r.cemetery.slice().reverse().map((d) =>
@@ -414,16 +450,32 @@ function renderNotes(notes) {
     const cls = n.statut.startsWith("confirm") ? "st-confirm" : n.statut === "contestée" ? "st-contest" : n.statut === "corrigée" ? "st-fix" : "";
     return `<div class="note"><div class="head">n°${n.id} · ${esc(n.auteur)} <span class="badge ${cls}">${esc(n.statut)}</span></div>
       ${md(n.texte)}${n.texte !== n.texte_original ? `<div><s>${esc(n.texte_original)}</s></div>` : ""}
-      ${n.sources.map((u) => `<div><a href="${esc(u)}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px">↗ ${esc(u)}</a></div>`).join("")}
+      ${n.sources.map((u) => `<div><a href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-size:12px">↗ ${esc(u)}</a></div>`).join("")}
       ${n.avis.length ? `<details><summary>${n.avis.length} avis</summary>${n.avis.map((a) => `<div>• ${esc(a.auteur)} ${esc(a.verdict)} : ${esc(a.commentaire)}</div>`).join("")}</details>` : ""}</div>`;
   }).join("");
+}
+
+function ago(ts) {
+  const m = Math.max(1, Math.round((Date.now() / 1000 - ts) / 60));
+  return m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} j`;
+}
+
+function renderNews(e) {
+  const fg = e.sentiment && e.sentiment.fear_greed;
+  const color = fg ? (fg.valeur < 25 ? "var(--danger)" : fg.valeur < 45 ? "var(--warn)" : fg.valeur < 55 ? "var(--muted)" : "var(--accent)") : "var(--muted)";
+  const head = fg ? `<div class="fg"><span class="big" style="color:${color}">${fg.valeur}</span><div><b>Fear & Greed</b> · ${esc(fg.humeur)}<div class="hint">hier : ${fg.veille}</div></div></div>` : "";
+  const items = (e.items || []).slice(0, 12).map((i) => `<div class="news"><div class="head"><span class="badge">${esc(i.source)}</span>
+      <span>il y a ${ago(i.published)}</span>${(i.assets || []).map((a) => `<span class="badge st-confirm">${esc(a)}</span>`).join("")}</div>
+      <a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener noreferrer">${esc(i.title)}</a></div>`).join("");
+  $("#newsPanel").innerHTML = head + (items || '<div class="empty" style="padding:0">Aucune actualité récupérée (voir l\'état des sources dans API).</div>');
 }
 
 function renderStats(e) {
   $("#stats").innerHTML = `<div class="kv"><span>Coût estimé (tokens)</span><b>${e.cost_usd.toFixed(3)} $</b></div>
     <div class="kv"><span>Appels Claude</span><b>${e.calls}</b></div>
     <div class="kv"><span>Recherches web</span><b>${e.searches}</b></div>
-    <div class="kv"><span>Pages lues</span><b>${e.fetches}</b></div>`;
+    <div class="kv"><span>Pages lues</span><b>${e.fetches}</b></div>
+    ${e.x_reads ? `<div class="kv"><span>Tweets lus (X)</span><b>${e.x_reads} · ≈ ${e.x_cost_usd.toFixed(2)} $</b></div>` : ""}`;
 }
 
 function handle(e) {
@@ -434,6 +486,7 @@ function handle(e) {
     case "notes": renderNotes(e.notes); break;
     case "contracts": contracts = e.contracts; contractsAt = Date.now() / 1000; renderContracts(); break;
     case "stats": renderStats(e); break;
+    case "news": renderNews(e); break;
     case "typing": if (e.on) typing[e.who.name] = e.who.name; else delete typing[e.who.name]; updateSubtitle(); break;
     case "stopped": showNewSession(); typing = {}; updateSubtitle(); break;
     case "session": sessionEnds = e.ends_at; tickTimer(); break;
@@ -506,8 +559,33 @@ function statusFor(name) {
   return `<span class="st ok">✅ ${r.ms} ms · BTC ${px(btc)}</span>`;
 }
 
+function newsStatus(name) {
+  const r = lastTest && (lastTest.veille || []).find((x) => x.name === name);
+  if (!r) return '<span class="st">non testée</span>';
+  return r.ok ? `<span class="st ok">✅ ${esc(r.detail)}</span>` : `<span class="st ko" title="${esc(r.detail)}">❌ ${esc(r.detail)}</span>`;
+}
+
+function renderVeille() {
+  const v = apiCfg.veille;
+  $("#newsOn").checked = v.active; $("#newsSentiment").checked = v.sentiment; $("#newsReddit").checked = v.reddit;
+  $("#feedList").innerHTML = v.flux.map((f, i) => `<div class="src"><input type="checkbox" data-feed="${i}" ${f.enabled ? "checked" : ""}>
+      <div style="min-width:0"><b>${esc(f.name)}</b> <button type="button" class="chip" data-delfeed="${i}" title="supprimer" style="padding:0 6px">✕</button>
+      <div class="hint">${esc(f.url)}</div></div>${newsStatus(f.name)}</div>`).join("");
+  $("#stSentiment").innerHTML = ["Fear & Greed", "CoinGecko tendances", "Financement (Binance)"].map((n) => {
+    const r = lastTest && (lastTest.veille || []).find((x) => x.name === n);
+    return r ? `${r.ok ? "✅" : "❌"} ${esc(n)}` : esc(n);
+  }).join(" · ");
+  $("#stReddit").innerHTML = newsStatus("Reddit").replace(/^<span class="st[^"]*"[^>]*>|<\/span>$/g, "");
+  $("#xQuery").value = v.x_requete; $("#xEvery").value = v.x_toutes_les_min;
+  const xr = lastTest && (lastTest.veille || []).find((x) => x.name === "X");
+  $("#xStatus").innerHTML = (v.x_configure ? `Clé X ${esc(v.x_hint)} configurée.` : "Aucune clé X : Radar et les traders passeront par la recherche web pour Twitter.")
+    + (xr ? ` ${xr.ok ? "✅" : "❌"} ${esc(xr.detail)}` : "")
+    + " Coût indicatif : ≈ 0,005 $ par tweet lu (10 tweets par relevé).";
+}
+
 function renderApi() {
   if (!apiCfg) return;
+  renderVeille();
   $("#builtinList").innerHTML = apiCfg.exchanges.map((e) =>
     `<label class="src"><input type="checkbox" data-ex="${esc(e.name)}" ${e.enabled ? "checked" : ""}><b>${esc(e.name)}</b>${statusFor(e.name)}</label>`).join("");
   $("#customList").innerHTML = apiCfg.custom.length ? apiCfg.custom.map((c, i) =>
@@ -521,6 +599,7 @@ function renderApi() {
   $("#srcSummary").innerHTML = lastTest
     ? `Sources : <b style="color:${ok.length ? "var(--accent)" : "var(--danger)"}">${ok.length}/${lastTest.sources.length} opérationnelles</b>${ok.length ? " (" + ok.map((x) => esc(x.name)).join(", ") + ")" : ""}`
       + ` · Claude ${lastTest.anthropic.ok ? "✅" : "❌"}`
+      + (lastTest.veille && lastTest.veille.length ? ` · Veille ${lastTest.veille.filter((x) => x.ok).length}/${lastTest.veille.length}` : "")
     : "Sources : vérification…";
   $("#testInfo").textContent = lastTest ? `dernier test à ${hhmm(lastTest.at)}` : "";
   setClaudeAvailable(a.configured && (!at || at.ok));
@@ -535,13 +614,21 @@ async function loadConfig() {
 async function saveConfig(extra = {}) {
   const exchanges = {};
   document.querySelectorAll("[data-ex]").forEach((c) => { exchanges[c.dataset.ex] = c.checked; });
-  const body = {exchanges, custom: apiCfg.custom, ...extra};
+  const flux = apiCfg.veille.flux.map((f, i) => {
+    const box = document.querySelector(`[data-feed="${i}"]`);
+    return {...f, enabled: box ? box.checked : f.enabled};
+  });
+  const veille = {active: $("#newsOn").checked, sentiment: $("#newsSentiment").checked, reddit: $("#newsReddit").checked,
+                  flux, x_requete: $("#xQuery").value, x_toutes_les_min: $("#xEvery").value, ...(extra.veille || {})};
+  const xt = $("#xToken").value.trim();
+  if (xt) veille.x_token = xt;
+  const body = {exchanges, custom: apiCfg.custom, ...extra, veille};
   const key = $("#apiKey").value.trim();
   if (key) body.anthropic_api_key = key;
   const r = await fetch("/api/config", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
   const data = await r.json();
   if (!r.ok) { $("#apiErr").textContent = data.error; return false; }
-  $("#apiErr").textContent = ""; $("#apiKey").value = "";
+  $("#apiErr").textContent = ""; $("#apiKey").value = ""; $("#xToken").value = "";
   apiCfg = data; renderApi();
   return true;
 }
@@ -563,6 +650,16 @@ $("#customList").onclick = async (ev) => {
   const i = ev.target.dataset.del; if (i === undefined) return;
   apiCfg.custom.splice(Number(i), 1); await saveConfig();
 };
+$("#feedList").onclick = async (ev) => {
+  const i = ev.target.dataset.delfeed; if (i === undefined) return;
+  apiCfg.veille.flux.splice(Number(i), 1); await saveConfig();
+};
+$("#fAdd").onclick = async () => {
+  apiCfg.veille.flux.push({name: $("#fName").value.trim(), url: $("#fUrl").value.trim(), enabled: true});
+  if (await saveConfig()) { $("#fName").value = ""; $("#fUrl").value = ""; await runTest(); }
+  else apiCfg.veille.flux.pop();
+};
+$("#xClear").onclick = () => saveConfig({veille: {clear_x_token: true}});
 $("#cAdd").onclick = async () => {
   const headers = {}, h = $("#cHeader").value;
   if (h.includes(":")) headers[h.slice(0, h.indexOf(":")).trim()] = h.slice(h.indexOf(":") + 1).trim();

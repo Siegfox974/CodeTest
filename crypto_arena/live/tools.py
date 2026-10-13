@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 
 from .broker import OrderRejected
 from .feed import INTERVALS, FeedError
@@ -43,6 +44,16 @@ def tool_schemas(universe: list[str]) -> list[dict]:
              {"symbole": symbol, "montant_usdt": {"type": "number"}}, ["symbole", "montant_usdt"]),
         tool("vendre", "Vend un pourcentage (1 à 100) de ta position sur un actif au prix du marché.",
              {"symbole": symbol, "pourcentage": {"type": "number"}}, ["symbole", "pourcentage"]),
+        tool("actualites", "Dernières nouvelles crypto relevées par Radar (CoinDesk, Cointelegraph, Decrypt, The Block, "
+             "Bitcoin Magazine, Reddit, X), filtrables par actif ou mot-clé. Gratuit et instantané.",
+             {"filtre": {"type": "string", "description": "symbole (BTC…) ou mot-clé ; vide pour tout"},
+              "nombre": {"type": "integer"}}, ["filtre", "nombre"]),
+        tool("sentiment_marche", "Sentiment du marché en temps réel : indice Fear & Greed, taux de financement des "
+             "contrats perpétuels par actif, cryptos tendance sur CoinGecko, sujets les plus votés sur Reddit."),
+        tool("chercher_sur_x", "Recherche en direct sur X (Twitter), 7 derniers jours. Chaque appel est facturé au "
+             "directeur (≈ 0,005 $ par tweet lu) : ne l'utilise que pour vérifier une rumeur ou une nouvelle précise.",
+             {"requete": {"type": "string", "description": "syntaxe de recherche X, ex. « $SOL (hack OR exploit) -is:retweet »"}},
+             ["requete"]),
         tool("lire_guide", "Lit une section du guide d'investissement crypto de la salle (0 = sommaire).",
              {"section": {"type": "integer"}}, ["section"]),
         tool("lire_carnet", "Lit le carnet de notes laissé par tes prédécesseurs, avec l'avis de chacun sur chaque note."),
@@ -141,6 +152,33 @@ class TraderTools:
         self.room.publish_portfolio()
         self.room.on_trade(self.seat, text)
         return fill
+
+    def _radar(self):
+        if self.room.radar is None:
+            raise ValueError("la veille (Radar) est désactivée pour cette séance")
+        return self.room.radar
+
+    def t_actualites(self, filtre: str = "", nombre: int = 10) -> list[dict]:
+        items = self._radar().latest(filtre, max(1, min(30, int(nombre))))
+        self._act("🗞️", f"parcourt les actualités{f' sur « {filtre} »' if filtre else ''} ({len(items)})")
+        return [{"source": i.source, "titre": i.title, "resume": i.summary, "url": i.url, "actifs": list(i.assets),
+                 "il_y_a_min": int((time.time() - i.published) / 60), "popularite": i.score} for i in items]
+
+    def t_sentiment_marche(self) -> dict:
+        self._act("🌡️", "consulte le sentiment du marché")
+        return self._radar().sentiment_view()
+
+    def t_chercher_sur_x(self, requete: str) -> list[dict]:
+        radar = self._radar()
+        try:
+            items = radar.search_x(requete, 10)
+        except LookupError as e:
+            raise ValueError(f"{e}. Utilise plutôt web_search avec « site:x.com » ou l'outil actualites.")
+        self._act("🐦", f"cherche sur X : « {requete} » ({len(items)} tweets)",
+                  [{"titre": i.title[:120], "url": i.url} for i in items[:6]])
+        self.room.publish_stats()
+        return [{"auteur": i.source, "texte": i.title, "url": i.url, "popularite": i.score,
+                 "il_y_a_min": int((time.time() - i.published) / 60)} for i in items]
 
     def t_lire_guide(self, section: int) -> str:
         self._act("📖", f"consulte le guide (section {int(section)})" if section else "consulte le sommaire du guide")

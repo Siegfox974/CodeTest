@@ -60,7 +60,10 @@ class ScriptedTrader:
         fmt = {"sym": sym, "sup": room.supervisor.persona.name, "note": notes[-1]["id"] if notes else 1}
         room.bus.thought(who, rng.choice(THOUGHTS).format(**fmt), "trader")
         self._pause()
-        room.bus.action(who, "🔎", f"recherche (démo) : « {sym} actualités aujourd'hui »", "trader")
+        if room.radar is not None and rng.random() < 0.5:
+            tools.call("actualites", {"filtre": sym, "nombre": 5})
+        else:
+            room.bus.action(who, "🔎", f"recherche (démo) : « {sym} actualités aujourd'hui »", "trader")
         tools.call("bougies", {"symbole": sym, "intervalle": "1h", "nombre": 48})
         self._pause()
         if notes and rng.random() < 0.5:

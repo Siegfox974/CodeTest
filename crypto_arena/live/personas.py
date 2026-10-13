@@ -103,3 +103,6 @@ ENFORCER_LINES = [
 def beating_message(enforcer: str, victim: str, manner: str, injury: str, reaction_s: float) -> str:
     reaction = f"{reaction_s * 1000:.0f} ms" if reaction_s < 1 else f"{reaction_s:.2f} s".replace(".", ",")
     return f"{enforcer} a tabassé {victim} {manner} sur ordre du directeur : {injury}. Temps de réaction : {reaction}."
+
+# Le veilleur : du code, pas un LLM. Il lit la presse crypto, le sentiment du marché et les réseaux sociaux.
+RADAR = Persona("Radar", "🛰️", "#26a69a", "veilleur : il lit toute la presse crypto et les réseaux, sans jamais dormir")

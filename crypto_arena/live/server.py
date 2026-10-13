@@ -22,9 +22,10 @@ STATIC = Path(__file__).parent / "static"
 
 class App:
     def __init__(self, notebook_path: Path, runs_dir: Path, feed_factory=None, client=None,
-                 config_path: Path = Path("config/apis.json"), http_get=None):
+                 config_path: Path = Path("config/apis.json"), http_get=None, http_get_text=None):
         self.config = ApiConfig(config_path)
         self.http_get = http_get
+        self.http_get_text = http_get_text
         self.notebook_path = notebook_path
         self.runs_dir = runs_dir
         self.feed_factory = feed_factory
@@ -48,6 +49,8 @@ class App:
 
     def test_sources(self) -> dict:
         kwargs = {"get": self.http_get} if self.http_get else {}
+        if self.http_get_text:
+            kwargs["get_text"] = self.http_get_text
         return self.config.test(anthropic_client=self.client, **kwargs)
 
     def start(self, body: dict) -> dict:
@@ -96,7 +99,13 @@ class App:
             stamp = time.strftime("%Y%m%d-%H%M%S")
             self.bus = EventBus(self.runs_dir / f"salle-{stamp}.jsonl")
             client = None if demo else self.claude_client()
-            self.room = TradingRoom(settings, feed, self.bus, Notebook(self.notebook_path), client)
+            news_kwargs = {}
+            if self.http_get:
+                news_kwargs["get"] = self.http_get
+            if self.http_get_text:
+                news_kwargs["get_text"] = self.http_get_text
+            radar = self.config.radar(settings.universe, **news_kwargs) if body.get("news", True) else None
+            self.room = TradingRoom(settings, feed, self.bus, Notebook(self.notebook_path), client, radar)
             self.room.start()
             return {"ok": True}
 

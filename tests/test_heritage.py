@@ -82,22 +82,34 @@ class SupervisorWatchTest(RoomTestCase):
 
 
 class GuideTest(unittest.TestCase):
-    def test_sections_are_split_by_number(self):
+    GUIDE = ("# Guide\n\n## 1. Règles d'or\n\n### Règles\n\n- A\n\n### Constats détaillés\n\n"
+             "**1.1 Premier constat.** (confiance : haute)\n\nDétail un.\n\nSources : https://a\n\n"
+             "**1.2 Second constat.** (confiance : faible)\n\nDétail deux.\n\n## 2. Coûts\n\n### Règles\n\n- B\n")
+
+    def test_sections_rules_index_and_single_finding(self):
         guide.full_guide.cache_clear()
         original = guide.GUIDE_DIR
         with tempfile.TemporaryDirectory() as d:
-            (Path(d) / "guide_crypto.md").write_text("# Guide\n\n## 1. Règles d'or\nA\n\n## 2. Coûts\nB\n", encoding="utf-8")
+            (Path(d) / "guide_crypto.md").write_text(self.GUIDE, encoding="utf-8")
             guide.GUIDE_DIR = Path(d)
             try:
-                self.assertIn("1. Règles d'or", guide.read_section(0))
-                self.assertEqual(guide.read_section(2), "## 2. Coûts\n\nB")
+                self.assertIn("2. Coûts", guide.read_section(0))
+                one = guide.read_section(1)
+                self.assertIn("- A", one)
+                self.assertIn("- 1.2 Second constat.", one)
+                self.assertNotIn("Détail deux", one)            # le détail n'est lu que sur demande
+                self.assertIn("Détail deux", guide.read_section(1, 2))
+                self.assertIn("compte 2 constats", guide.read_section(1, 9))
             finally:
                 guide.GUIDE_DIR = original
                 guide.full_guide.cache_clear()
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_real_guide_is_present_and_free_of_brutus(self):
+        text = guide.full_guide()
+        self.assertEqual(len(guide.sections()), 7)
+        self.assertNotIn("Brutus", text)
+        self.assertNotIn("homme de main", text)
+        self.assertTrue(guide.cheat_sheet())
 
 
 class TakeoverGraceTest(RoomTestCase):

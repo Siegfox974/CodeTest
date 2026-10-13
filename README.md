@@ -73,10 +73,12 @@ versionnée dans git, et le serveur n'écoute que sur ta machine (127.0.0.1).
   trader dès qu'il est passé (taille par rapport à la marge, frais, actif, moment), puis fait le bilan du tour.
 - **Le Directeur, c'est toi.** Tu écris dans le chat avec la barre du bas. Tes messages sont des ordres que le trader et
   le superviseur lisent dans leur briefing suivant. Ils n'entraînent aucun appel supplémentaire à Claude.
-- **Le guide d'investissement** (`crypto_arena/live/guide/`) est issu d'une recherche web approfondie et vérifiée :
-  coûts, taille de position quand la perte tolérée est minuscule, lecture du marché, catalyseurs, profils des
-  10 actifs, stratégies pour sessions courtes, héritage d'un portefeuille, décision sous pression, pièges. Son
-  aide-mémoire est dans le prompt de chaque agent, et le guide complet est consultable avec l'outil `lire_guide`.
+- **Le guide d'investissement** (`crypto_arena/live/guide/`) rassemble tels quels les résultats d'une recherche web
+  sur sept thèmes : coûts réels, risque et taille de position, analyse technique, catalyseurs, psychologie et pièges,
+  stratégies pour sessions courtes, profils des 10 actifs. Il contient 111 règles et 103 constats sourcés, chacun avec
+  son niveau de confiance. Ils n'ont pas été vérifiés par recoupement. L'aide-mémoire (les 3 premières règles de chaque
+  thème) est dans le prompt de chaque agent. Le reste se consulte avec `lire_guide` : une section donne ses règles et
+  le sommaire de ses constats, et chaque constat ne se lit en détail que sur demande, pour économiser les jetons.
 - **Les trop prudents sont punis.** À la fin de chaque tour, au moins 50 % (réglable) du portefeuille doit être investi
   en crypto. Sinon l'agent reçoit un avertissement ; au 3ᵉ, le superviseur l'exécute pour lâcheté.
 - **L'écran** ressemble à un groupe WhatsApp : messages, pensées (bulles en pointillés), recherches et ordres, alertes,

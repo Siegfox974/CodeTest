@@ -38,9 +38,21 @@ def table_of_contents() -> str:
     return "\n".join(f"{n}. {title}" for n, (title, _) in sorted(found.items()))
 
 
-def read_section(number: int) -> str:
+def read_section(number: int, finding: int = 0) -> str:
+    """Une section coûte cher à lire en entier : par défaut, ses règles et le sommaire de ses constats ;
+    un constat n'est renvoyé en détail que sur demande."""
     found = sections()
     if number == 0 or number not in found:
         return "Sommaire du guide (appelle lire_guide avec le numéro d'une section) :\n" + table_of_contents()
     title, text = found[number]
-    return f"## {number}. {title}\n\n{text}"
+    rules, _, details = text.partition("### Constats détaillés")
+    blocks = re.split(r"(?=^\*\*\d+\.\d+ )", details, flags=re.MULTILINE)
+    findings = [b.strip() for b in blocks if b.strip().startswith("**")]
+    if finding:
+        if not 1 <= finding <= len(findings):
+            return f"La section {number} compte {len(findings)} constats (1 à {len(findings)})."
+        return f"## {number}. {title} — constat {number}.{finding}\n\n{findings[finding - 1]}"
+    index = "\n".join(f"- {number}.{i} " + re.sub(r"^\*\*\d+\.\d+ |\*\*.*$", "", f.splitlines()[0])
+                      for i, f in enumerate(findings, 1))
+    return (f"## {number}. {title}\n\n{rules.strip()}\n\n### Constats (lis-en un avec lire_guide(section={number}, "
+            f"constat=N))\n{index}")

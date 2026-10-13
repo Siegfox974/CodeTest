@@ -54,8 +54,9 @@ def tool_schemas(universe: list[str]) -> list[dict]:
              "directeur (≈ 0,005 $ par tweet lu) : ne l'utilise que pour vérifier une rumeur ou une nouvelle précise.",
              {"requete": {"type": "string", "description": "syntaxe de recherche X, ex. « $SOL (hack OR exploit) -is:retweet »"}},
              ["requete"]),
-        tool("lire_guide", "Lit une section du guide d'investissement crypto de la salle (0 = sommaire).",
-             {"section": {"type": "integer"}}, ["section"]),
+        tool("lire_guide", "Lit le guide d'investissement crypto de la salle : section 0 = sommaire ; une section donne ses "
+             "règles et la liste de ses constats ; constat = N donne un constat en détail avec ses sources (0 = aucun).",
+             {"section": {"type": "integer"}, "constat": {"type": "integer"}}, ["section", "constat"]),
         tool("lire_carnet", "Lit le carnet de notes laissé par tes prédécesseurs, avec l'avis de chacun sur chaque note."),
         tool("ajouter_note", "Ajoute une note au carnet pour tes successeurs. Cite tes sources (URL) quand tu en as.",
              {"texte": {"type": "string"}, "sources": {"type": "array", "items": {"type": "string"}}},
@@ -180,9 +181,10 @@ class TraderTools:
         return [{"auteur": i.source, "texte": i.title, "url": i.url, "popularite": i.score,
                  "il_y_a_min": int((time.time() - i.published) / 60)} for i in items]
 
-    def t_lire_guide(self, section: int) -> str:
-        self._act("📖", f"consulte le guide (section {int(section)})" if section else "consulte le sommaire du guide")
-        return read_section(int(section))
+    def t_lire_guide(self, section: int, constat: int = 0) -> str:
+        what = (f"section {int(section)}" + (f", constat {int(constat)}" if constat else "")) if section else "sommaire"
+        self._act("📖", f"consulte le guide ({what})")
+        return read_section(int(section), int(constat))
 
     def t_lire_carnet(self) -> list[dict]:
         notes = self.room.notebook.view()

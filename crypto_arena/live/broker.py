@@ -126,6 +126,28 @@ class PaperBroker:
             return {"vente": symbol, "quantite": qty, "prix": price, "montant_usdt": proceeds,
                     "frais": proceeds * self.fee_rate}
 
+    def charge(self, owner: str, amount: float) -> dict:
+        """Prélève le coût de la pensée de l'agent. S'il manque du cash, sa plus grosse position est vendue
+        d'office (frais compris) pour payer : penser coûte, même quand on est tout investi."""
+        with self.lock:
+            acc = self.accounts[owner]
+            sold = None
+            if amount > acc.cash + 1e-12 and acc.holdings:
+                prices = self.prices()
+                sym = max(acc.holdings, key=lambda s: acc.holdings[s] * prices[s])
+                missing = amount - acc.cash
+                qty = min(acc.holdings[sym], missing / (prices[sym] * (1 - self.fee_rate)))
+                acc.cash += qty * prices[sym] * (1 - self.fee_rate)
+                held = acc.holdings[sym]
+                acc.holdings[sym] = held - qty
+                acc.cost_basis[sym] = acc.cost_basis.get(sym, 0.0) * (1 - qty / held)
+                if acc.holdings[sym] <= held * 1e-12:
+                    del acc.holdings[sym]
+                    acc.cost_basis.pop(sym, None)
+                sold = {"symbole": sym, "quantite": qty, "prix": prices[sym]}
+            acc.cash -= amount          # peut devenir légèrement négatif si tout est déjà vendu : c'est une dette
+            return {"montant": amount, "vente_forcee": sold}
+
     def freeze(self, owner: str, reason: str) -> None:
         with self.lock:
             self.accounts[owner].frozen = reason

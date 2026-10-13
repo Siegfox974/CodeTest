@@ -73,6 +73,8 @@ class App:
             settings = Settings(
                 capital=capital,
                 max_loss=max_loss,
+                thought_price_turn=max(0.0, float(body.get("thought_price_turn", 0.05) or 0)),
+                thought_price_search=max(0.0, float(body.get("thought_price_search", 0.01) or 0)),
                 inherit=str(body.get("inherit", "on")).lower() in ("on", "true", "1", "yes"),
                 duration_seconds=max(0.0, float(body.get("duration_hours", 0) or 0)) * 3600,
                 mode=mode,
@@ -106,6 +108,7 @@ class App:
                 news_kwargs["get_text"] = self.http_get_text
             radar = self.config.radar(settings.universe, **news_kwargs) if body.get("news", True) else None
             self.room = TradingRoom(settings, feed, self.bus, Notebook(self.notebook_path), client, radar)
+            self.room.souls_dir = self.runs_dir / f"ames-{stamp}"
             self.room.start()
             return {"ok": True}
 

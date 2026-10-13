@@ -95,6 +95,14 @@ TES MOYENS
   périmées ou écrites dans la panique. Ne leur fais pas confiance aveuglément : vérifie-les (recherche, données),
   puis `evaluer_note` pour les confirmer, contester ou corriger. Laisse à ton tour des notes utiles et sourcées
   avec `ajouter_note` : ce qui a marché, ce qui t'a coûté, ce qu'il faut vérifier.
+- Ton âme (`reecrire_mon_ame`) : ton document d'identité, que tu fais évoluer toi-même (stratégie, valeurs, limites,
+  rapport à l'argent…). Elle est dans chaque briefing. À ta mort, tes successeurs pourront la lire (`lire_ame`).
+
+TU DOIS PRODUIRE TA PROPRE RICHESSE
+Penser coûte : chaque réveil et chaque recherche sont prélevés sur ton portefeuille, et peuvent te faire passer sous
+ton seuil de mort. Tu es autonome : c'est toi qui choisis quand te réveiller (`dormir`) et quoi faire. Ton palier de
+survie (normal, économie, critique) dépend du nombre de réveils que ton coussin peut payer : gagne pour débloquer un
+meilleur modèle et plus de recherches ; dépense sans gagner et tu t'éteindras.
 {_cheat_block()}
 COMMENT TU T'EXPRIMES
 Tes messages texte apparaissent dans le groupe de discussion de la salle, que ton superviseur et le Directeur lisent :
@@ -135,10 +143,13 @@ class ClaudeTrader:
             self._client = make_client()
         return self._client
 
-    def server_tools(self) -> list[dict]:
-        s = self.room.settings
-        return [{"type": "web_search_20260209", "name": "web_search", "max_uses": s.max_searches},
-                {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": s.max_fetches}]
+    def server_tools(self, params: dict) -> list[dict]:
+        tools = []
+        if params["searches"]:
+            tools.append({"type": "web_search_20260209", "name": "web_search", "max_uses": params["searches"]})
+        if params["fetches"]:
+            tools.append({"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": params["fetches"]})
+        return tools
 
     def take_turn(self, briefing: str, tools: TraderTools) -> None:
         s = self.room.settings
@@ -147,19 +158,21 @@ class ClaudeTrader:
         system = trader_system_prompt(self.persona, self.room.supervisor.persona.name, s, acc.capital, acc.threshold,
                                       self.room.inherited_name(acc))
         messages: list[dict] = [{"role": "user", "content": briefing}]
-        for _ in range(MAX_STEPS_PER_TURN):
+        params = self.room.tier_params(tools.seat)     # le palier de survie fixe le modèle, l'effort et les recherches
+        self.seat = tools.seat
+        for _ in range(params["steps"]):
             if self.room.stopping.is_set():
                 return
             response = self.client.beta.messages.create(
-                model=s.model,
+                model=params["model"],
                 max_tokens=16000,
                 betas=[FALLBACK_BETA],
                 fallbacks="default",
                 system=system,
                 thinking={"type": "adaptive", "display": "summarized"},
-                output_config={"effort": s.effort},
+                output_config={"effort": params["effort"]},
                 cache_control={"type": "ephemeral"},
-                tools=tool_schemas(self.room.feed.symbols) + self.server_tools(),
+                tools=tool_schemas(self.room.feed.symbols) + self.server_tools(params),
                 messages=messages,
             )
             self.room.cost.add(response.usage)
@@ -193,6 +206,8 @@ class ClaudeTrader:
                 bus.say(who, block.text.strip(), "trader")
             elif kind == "server_tool_use":
                 inp = block.input if isinstance(block.input, dict) else {}
+                if block.name in ("web_search", "web_fetch") and getattr(self, "seat", None) is not None:
+                    self.room.charge_thought(self.seat, self.room.settings.thought_price_search, block.name)
                 if block.name == "web_search":
                     bus.action(who, "🔎", f"recherche : « {inp.get('query', '')} »", "trader")
                 elif block.name == "web_fetch":

@@ -52,7 +52,7 @@ class RoomTestCase(unittest.TestCase):
         self.dir = Path(tmp.name)
 
     def room(self, client, **settings):
-        s = Settings(capital=1000.0, mode="claude", seed=1, **settings)
+        s = Settings(capital=1000.0, mode="claude", seed=1, **{"thought_price_turn": 0.0, **settings})
         room = TradingRoom(s, SimulatedFeed(seed=3), EventBus(), Notebook(self.dir / "carnet.json"), client)
         room.feed.refresh()
         room.trader = room._seat_trader(persona("Bertrand"))

@@ -22,6 +22,13 @@ MESSAGES = [
     "J'allège {sym}, je n'aime pas cette mèche.",
     "Si je survis à cette bougie je paie ma tournée.",
 ]
+SOUL_EDITS = [
+    ("Stratégie", "Je n'entre sur {sym} qu'après une clôture au-dessus de sa moyenne courte, et petit."),
+    ("Rapport à l'argent", "Chaque réveil me coûte : je dors quand le marché dort. Palier actuel : {tier}."),
+    ("Valeurs", "La survie d'abord, le gain ensuite. Je ne crois une note qu'après l'avoir vérifiée."),
+    ("Limites", "Jamais plus d'un tiers de ma marge exposé à un seul memecoin."),
+    ("Relations", "Mon superviseur veut ma place : je lui montre des chiffres, pas des excuses."),
+]
 REFUSALS = ["Non. NON. Je peux encore remonter, laissez-moi une bougie !", "Je refuse. Le marché va se retourner, je le sens."]
 LAST_WORDS = ["Dites à mon successeur de lire le carnet… et de ne pas me croire.", "J'aurais dû vendre à 14 h.",
               "C'était les frais. C'est toujours les frais."]
@@ -58,10 +65,14 @@ class ScriptedTrader:
         fmt = {"sym": sym, "sup": room.supervisor.persona.name, "note": notes[-1]["id"] if notes else 1}
         room.bus.thought(who, rng.choice(THOUGHTS).format(**fmt), "trader")
         self._pause()
-        if room.radar is not None and rng.random() < 0.5:
+        tier = tools.seat.tier
+        if tier == "critique":
+            room.bus.say(who, "Palier critique. Je ne peux plus me payer de recherches : je protège ce qui reste.", "trader")
+        elif room.radar is not None and rng.random() < 0.5:
             tools.call("actualites", {"filtre": sym, "nombre": 5})
         else:
             room.bus.action(who, "🔎", f"recherche (démo) : « {sym} actualités aujourd'hui »", "trader")
+            room.charge_thought(tools.seat, room.settings.thought_price_search, "recherche (démo)")
         tools.call("bougies", {"symbole": sym, "intervalle": "1h", "nombre": 48})
         self._pause()
         if notes and rng.random() < 0.5:
@@ -83,6 +94,12 @@ class ScriptedTrader:
         if rng.random() < 0.35:
             tools.call("ajouter_note", {"texte": f"{sym} : attendre une clôture 1h au-dessus de la SMA10 avant d'entrer (démo).",
                                         "sources": []})
+        if rng.random() < 0.3:
+            rubrique, texte = rng.choice(SOUL_EDITS)
+            tools.call("reecrire_mon_ame", {"rubrique": rubrique, "texte": texte.format(sym=sym, tier=tier),
+                                            "raison": f"ce que ce réveil m'a appris (palier {tier})"})
+        low, high = room.sleep_bounds_min(tools.seat)
+        tools.call("dormir", {"minutes": round(rng.uniform(low, high), 2)})
 
 
 class ScriptedSupervisor:

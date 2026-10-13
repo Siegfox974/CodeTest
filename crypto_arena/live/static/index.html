@@ -81,6 +81,14 @@ aside, .panel { background: var(--side); border-right: 1px solid var(--line); ov
 .compose input { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border-radius: 20px; border: 1px solid var(--line);
   background: var(--app); color: var(--text); }
 .compose .send { border-radius: 50%; width: 42px; height: 42px; padding: 0; font-size: 18px; }
+.soul h4 { margin: 8px 0 2px; font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: .03em; }
+.soul p { margin: 0; font-size: 13px; }
+.soul .protected { font-size: 11.5px; color: var(--muted); font-style: italic; margin-bottom: 4px; }
+.soul .change { font-size: 12px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 4px; margin-top: 6px; }
+.tier-normal { background: rgba(0,168,132,.15); color: var(--accent); }
+.tier-economie { background: rgba(245,165,36,.2); color: #b26b00; }
+.tier-critique { background: rgba(229,72,77,.15); color: var(--danger); }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font-size: 12px; }
 .news { border-top: 1px solid var(--line); padding: 7px 0; font-size: 13px; }
 .news:first-child { border-top: 0; }
 .news a { color: var(--text); text-decoration: none; }
@@ -184,6 +192,8 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
     <div class="card" id="wallet"><div class="empty" style="padding:0">Aucun portefeuille pour l'instant.</div></div>
     <div class="section">Marché</div>
     <div class="card"><table id="market"></table><div class="kv" style="margin-top:8px"><span id="source"></span></div></div>
+    <div class="section">Âme du trader 📜</div>
+    <div class="card soul" id="soulPanel"><div class="empty" style="padding:0">Pas encore d'âme.</div></div>
     <div class="section">Veille de Radar 🛰️</div>
     <div class="card" id="newsPanel"><div class="empty" style="padding:0">Radar n'a encore rien relevé.</div></div>
     <div class="section">Carnet de la lignée</div>
@@ -216,6 +226,13 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
       <button type="button" class="chip" data-loss="1">1</button><button type="button" class="chip" data-loss="2">2</button>
       <button type="button" class="chip" data-loss="5">5</button>
     </div>
+    <div class="grid2">
+      <label class="field">Prix d'un réveil de l'agent ($)
+        <input name="thought_price_turn" type="number" min="0" step="0.01" value="0.05"></label>
+      <label class="field">Prix d'une recherche ($)
+        <input name="thought_price_search" type="number" min="0" step="0.01" value="0.01"></label>
+    </div>
+    <div class="hint" id="thoughtHint" style="margin:-6px 0 12px">Penser coûte : ces prix fictifs sont prélevés sur le portefeuille de l'agent, qui doit gagner plus qu'il ne dépense.</div>
     <label class="field" id="customDuration" hidden>Durée personnalisée (en heures, ex. 3 ou 0,25)
       <input name="duration_custom" type="number" min="0.02" step="any" value="3"></label>
     <div class="sources"><span id="srcSummary">Sources : vérification…</span>
@@ -244,6 +261,14 @@ td { padding: 3px 0; } td:last-child, td:nth-child(2) { text-align: right; font-
     <div class="err" id="err"></div>
     <button class="btn go" type="submit">Maintenant, tu travailles !</button>
   </form>
+</div>
+
+<div class="overlay modal" id="soulModal" hidden>
+  <div class="startcard soul">
+    <div style="display:flex;align-items:center;gap:8px"><h2 style="flex:1" id="soulModalTitle">Âme</h2>
+      <button type="button" class="btn small light" id="soulClose">Fermer</button></div>
+    <div id="soulModalBody"></div>
+  </div>
 </div>
 
 <div class="overlay modal" id="apiModal" hidden>
@@ -313,6 +338,7 @@ let last = -1, busId = null, roster = null, typing = {}, prevAuthor = null, poll
 function resetScreen() {
   if (pollCtl) pollCtl.abort();
   last = -1; busId = null; roster = null; typing = {}; prevAuthor = null; sessionEnds = null;
+  $("#soulPanel").innerHTML = '<div class="empty" style="padding:0">Pas encore d\'âme.</div>';
   $("#timer").textContent = "⏳ —";
   $("#newsPanel").innerHTML = '<div class="empty" style="padding:0">Radar n\'a encore rien relevé.</div>';
   feed.innerHTML = "";
@@ -373,8 +399,8 @@ function renderRoster(r) {
                            [r.radar, "veilleur · presse, sentiment, réseaux", null]]
     .filter(([p]) => p)
     .map(([p, role]) => `<div class="person">${avatar(p)}<div class="who"><div class="name">${esc(p.name)}</div><div class="sub">${role}</div><div class="sub" title="${esc(p.temperament)}">${esc(p.temperament)}</div></div></div>`).join("");
-  $("#cemetery").innerHTML = r.cemetery.length ? r.cemetery.slice().reverse().map((d) =>
-    `<div class="person dead">${avatar(d.persona)}<div class="who"><div class="name">✝ ${esc(d.persona.name)} <span class="badge">gén. ${d.generation}</span></div><div class="sub" title="${esc(d.cause)}">${esc(d.cause)}</div><div class="sub">perte ${usd(d.perte)} · ${d.tours} tours · ${d.duree_min} min</div></div></div>`).join("")
+  $("#cemetery").innerHTML = r.cemetery.length ? r.cemetery.slice().reverse().map((d, j) =>
+    `<div class="person dead">${avatar(d.persona)}<div class="who"><div class="name">✝ ${esc(d.persona.name)} <span class="badge">gén. ${d.generation}</span></div><div class="sub" title="${esc(d.cause)}">${esc(d.cause)}</div><div class="sub">perte ${usd(d.perte)} · ${d.tours} tours · ${d.duree_min} min</div>${d.ame ? `<button type="button" class="linkbtn" data-soul="${r.cemetery.length - 1 - j}">📜 lire son âme</button>` : ""}</div></div>`).join("")
     : '<div class="empty">Personne, pour l\'instant.</div>';
   updateSubtitle();
 }
@@ -403,6 +429,9 @@ function renderWallet(e) {
     <div class="meter" title="jauge de survie"><i style="width:${safety}%;background:${safety > 50 ? "var(--accent)" : safety > 20 ? "var(--warn)" : "var(--danger)"}"></i><s style="left:50%" title="capital confié"></s></div>
     <div class="kv"><span>Investi en crypto</span><b>${s.part_investie_pct} %</b></div>
     <div class="meter"><i style="width:${s.part_investie_pct}%"></i><s style="left:${minExp}%"></s></div>
+    ${e.tier ? `<div class="kv"><span>Palier de survie</span><span class="badge tier-${e.tier.normalize("NFD").replace(/[\u0300-\u036f]/g, "")}">${esc(e.tier)}</span></div>` : ""}
+    ${e.thought_spent != null ? `<div class="kv"><span>Pensée payée (dernier réveil)</span><b>${usd(e.thought_spent)} (${usd(e.last_turn_cost)})</b></div>` : ""}
+    ${e.next_wake && e.next_wake * 1000 > Date.now() ? `<div class="kv"><span>Prochain réveil</span><b>😴 ${hhmm(e.next_wake)}</b></div>` : ""}
     <div class="kv"><span>Avertissements (lâcheté)</span><span class="strikes">${"⚠️".repeat(e.strikes)}${"▫️".repeat(Math.max(0, e.max_strikes - e.strikes))}</span></div>
     <div class="kv"><span>Cash</span><b>${usd(s.cash_usdt)}</b></div>
     <table>${Object.entries(s.positions).map(([k, p]) => `<tr><td>${k}</td><td>${px(p.quantite)}</td><td>${usd(p.valeur_usdt)}${p.plus_ou_moins_value_usdt != null ? ` <span class="${p.plus_ou_moins_value_usdt >= 0 ? "pos" : "neg"}" style="font-size:11px">${p.plus_ou_moins_value_usdt >= 0 ? "+" : ""}${p.plus_ou_moins_value_usdt.toFixed(2)}</span>` : ""}</td></tr>`).join("")}</table>`;
@@ -444,6 +473,27 @@ function renderNews(e) {
   $("#newsPanel").innerHTML = head + (items || '<div class="empty" style="padding:0">Aucune actualité récupérée (voir l\'état des sources dans API).</div>');
 }
 
+function soulHtml(soul) {
+  const sections = Object.entries(soul.sections).map(([k, v]) => `<h4>${esc(k)}</h4><p>${esc(v)}</p>`).join("");
+  const recent = (soul.recent || []).slice().reverse().map((c) =>
+    `<div class="change">✍️ ${hhmm(c.t)} · ${esc(c.rubrique)} — ${esc(c.raison || "sans raison")}</div>`).join("");
+  return `<div class="protected">Lois de la salle au-dessus de l'âme, non modifiables.</div>${sections}
+    <div class="hint" style="margin-top:6px">${soul.versions} réécriture(s)</div>${recent}`;
+}
+
+function renderSoul(e) {
+  if (e.role !== "trader" || (roster && e.name !== roster.trader.name)) return;
+  $("#soulPanel").innerHTML = `<div class="kv"><span>${esc(e.name)}</span><span class="badge">${e.versions} version(s)</span></div>` + soulHtml(e);
+}
+
+function showDeadSoul(i) {
+  const d = roster && roster.cemetery[i];
+  if (!d || !d.ame) return;
+  $("#soulModalTitle").textContent = `Âme de ✝ ${d.persona.name}`;
+  $("#soulModalBody").innerHTML = soulHtml(d.ame) + `<div class="hint" style="margin-top:8px">Pensée payée de son vivant : ${usd(d.pensee_usd || 0)}</div>`;
+  $("#soulModal").hidden = false;
+}
+
 function renderStats(e) {
   $("#stats").innerHTML = `<div class="kv"><span>Coût estimé (tokens)</span><b>${e.cost_usd.toFixed(3)} $</b></div>
     <div class="kv"><span>Appels Claude</span><b>${e.calls}</b></div>
@@ -460,6 +510,7 @@ function handle(e) {
     case "notes": renderNotes(e.notes); break;
     case "stats": renderStats(e); break;
     case "news": renderNews(e); break;
+    case "soul": renderSoul(e); break;
     case "typing": if (e.on) typing[e.who.name] = e.who.name; else delete typing[e.who.name]; updateSubtitle(); break;
     case "stopped": if (sessionEnds !== null) $("#timer").textContent = "⏳ arrêtée"; sessionEnds = null; showNewSession(); typing = {}; updateSubtitle(); break;
     case "session": sessionEnds = e.ends_at; $("#timer").textContent = "⏳ ∞"; tickTimer(); break;
@@ -634,6 +685,22 @@ $("#directorForm").onsubmit = async (ev) => {
   const input = $("#directorInput");
   if (await sendDirector(input.value)) input.value = "";
 };
+$("#cemetery").onclick = (ev) => { const i = ev.target.dataset.soul; if (i !== undefined) showDeadSoul(Number(i)); };
+$("#soulClose").onclick = () => { $("#soulModal").hidden = true; };
+function checkThoughtBudget() {
+  const loss = Number(document.querySelector('[name="max_loss"]').value || 0);
+  const price = Number(document.querySelector('[name="thought_price_turn"]').value || 0);
+  const hint = $("#thoughtHint");
+  if (price > 0 && loss < price) {
+    hint.innerHTML = `<b style="color:var(--danger)">Attention : ${loss} $ de perte tolérée ne paie même pas un réveil à ${price} $. L'agent mourra dès qu'il pensera, sauf à gagner tout de suite.</b>`;
+  } else {
+    const wakes = price > 0 ? Math.floor(loss / price) : "∞";
+    hint.textContent = `Penser coûte : ces prix fictifs sont prélevés sur le portefeuille. Au départ, la perte tolérée paie ${wakes} réveil(s) ; à l'agent de gagner plus qu'il ne dépense.`;
+  }
+}
+["max_loss", "thought_price_turn"].forEach((n) => document.querySelector(`[name="${n}"]`).addEventListener("input", checkThoughtBudget));
+$("#lossChips").addEventListener("click", () => setTimeout(checkThoughtBudget));
+checkThoughtBudget();
 $("#lossChips").onclick = (ev) => { if (ev.target.dataset.loss !== undefined) document.querySelector('[name="max_loss"]').value = ev.target.dataset.loss; };
 document.querySelector('[name="duration_choice"]').onchange = (ev) => { $("#customDuration").hidden = ev.target.value !== "custom"; };
 

@@ -69,6 +69,22 @@ versionnée dans git, et le serveur n'écoute que sur ta machine (127.0.0.1).
   sa valeur à la reprise, moins la perte tolérée. Il dispose de son premier tour, jusqu'à sa fin, pour reprendre la
   main avant que la règle ne s'applique. Si la lignée tombe sous 1 % du capital de départ, ou sous la perte tolérée,
   la séance s'arrête.
+- **L'âme (SOUL.md), idée reprise d'Automaton (Conway Research).** Chaque agent a son document d'identité, organisé
+  en rubriques : raison d'être, valeurs, personnalité, stratégie, limites, relations, rapport à l'argent. Il le
+  réécrit lui-même (`reecrire_mon_ame`, 3 rubriques par réveil au plus, 600 caractères chacune), et le relit à chaque
+  réveil. Les lois de la salle restent au-dessus de son âme et ne sont pas modifiables. Toutes les versions sont
+  gardées. Un superviseur promu garde son âme. À sa mort, l'âme est archivée : ses successeurs la lisent avec
+  `lire_ame`, et tu la lis depuis le cimetière. Les âmes sont enregistrées dans `runs/ames-<date>/`.
+- **Produire sa propre richesse.** Penser coûte : chaque réveil (0,05 $ par défaut) et chaque recherche ou page lue
+  (0,01 $) sont prélevés sur le portefeuille de l'agent. Ces prix fictifs sont réglables dans le formulaire. S'il
+  n'a plus de cash, sa plus grosse position est vendue d'office pour payer. Un agent qui réfléchit plus qu'il ne
+  gagne finit sous son seuil. L'agent est autonome sur son rythme : il choisit combien de temps dormir (`dormir`). Un
+  battement de cœur, en code et gratuit, le réveille si sa marge fond de moitié pendant son sommeil.
+- **Les paliers de survie**, calculés sur le nombre de réveils que son coussin peut encore payer. Au palier
+  **normal** (10 réveils ou plus), il a le modèle principal et les recherches web. Au palier **économie** (3 à 10), il
+  passe à un modèle plus léger (Claude Sonnet 5.5), avec 1 recherche par réveil et un sommeil plus long. Au palier
+  **critique**, il a une réflexion minimale et aucune recherche. Gagner le fait remonter, avec une marge de 25 % pour
+  éviter le yo-yo.
 - **Le superviseur est aux aguets** : il sait qu'il héritera de ce portefeuille. Il analyse donc chaque ordre du
   trader dès qu'il est passé (taille par rapport à la marge, frais, actif, moment), puis fait le bilan du tour.
 - **Le Directeur, c'est toi.** Tu écris dans le chat avec la barre du bas. Tes messages sont des ordres que le trader et

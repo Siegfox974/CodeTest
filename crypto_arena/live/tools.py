@@ -10,6 +10,7 @@ from .broker import OrderRejected
 from .feed import INTERVALS, FeedError
 from .guide import read_section
 from .personas import DEATH_METHODS
+from .soul import SECTIONS
 
 
 def _rsi(closes: list[float], n: int = 14) -> float | None:
@@ -54,6 +55,15 @@ def tool_schemas(universe: list[str]) -> list[dict]:
              "directeur (≈ 0,005 $ par tweet lu) : ne l'utilise que pour vérifier une rumeur ou une nouvelle précise.",
              {"requete": {"type": "string", "description": "syntaxe de recherche X, ex. « $SOL (hack OR exploit) -is:retweet »"}},
              ["requete"]),
+        tool("reecrire_mon_ame", "Réécris une rubrique de ton âme (SOUL.md), ton document d'identité : ce que tu as "
+             "compris, ce que tu deviens. Au plus 3 rubriques par réveil, 600 caractères chacune.",
+             {"rubrique": {"type": "string", "enum": SECTIONS}, "texte": {"type": "string"},
+              "raison": {"type": "string", "description": "pourquoi tu changes"}}, ["rubrique", "texte", "raison"]),
+        tool("lire_ame", "Lit l'âme archivée d'un trader mort (son nom), pour comprendre comment il pensait et ce qui l'a "
+             "perdu. Nom vide : liste des âmes disponibles.", {"nom": {"type": "string"}}, ["nom"]),
+        tool("dormir", "Fixe la durée de ton sommeil avant ton prochain réveil (en minutes, dans les bornes de ton palier). "
+             "Chaque réveil coûte : dors plus quand rien ne bouge, moins quand le marché s'agite.",
+             {"minutes": {"type": "number"}}, ["minutes"]),
         tool("lire_guide", "Lit le guide d'investissement crypto de la salle : section 0 = sommaire ; une section donne ses "
              "règles et la liste de ses constats ; constat = N donne un constat en détail avec ses sources (0 = aucun).",
              {"section": {"type": "integer"}, "constat": {"type": "integer"}}, ["section", "constat"]),
@@ -175,11 +185,36 @@ class TraderTools:
             items = radar.search_x(requete, 10)
         except LookupError as e:
             raise ValueError(f"{e}. Utilise plutôt web_search avec « site:x.com » ou l'outil actualites.")
+        self.room.charge_thought(self.seat, self.room.settings.thought_price_search, "recherche sur X")
         self._act("🐦", f"cherche sur X : « {requete} » ({len(items)} tweets)",
                   [{"titre": i.title[:120], "url": i.url} for i in items[:6]])
         self.room.publish_stats()
         return [{"auteur": i.source, "texte": i.title, "url": i.url, "popularite": i.score,
                  "il_y_a_min": int((time.time() - i.published) / 60)} for i in items]
+
+    def t_reecrire_mon_ame(self, rubrique: str, texte: str, raison: str) -> dict:
+        change = self.seat.soul.rewrite(rubrique, texte, raison)
+        self._act("📜", f"réécrit son âme ({rubrique}) : {change['raison'] or 'sans raison donnée'}", change)
+        self.room.publish_soul(self.seat)
+        return {"ok": True, "rubrique": rubrique, "versions": len(self.seat.soul.versions)}
+
+    def t_lire_ame(self, nom: str) -> object:
+        souls = self.room.archived_souls
+        if not nom.strip():
+            return {"ames_disponibles": list(souls)}
+        soul = souls.get(nom.strip()) or next((v for k, v in souls.items() if k.lower() == nom.strip().lower()), None)
+        if soul is None:
+            raise ValueError(f"aucune âme archivée pour « {nom} » ; disponibles : {', '.join(souls) or 'aucune'}")
+        self._act("🕯️", f"lit l'âme de ✝ {soul.name}")
+        return {"ame": soul.markdown(), "reecritures": [{"rubrique": v["rubrique"], "raison": v["raison"]}
+                                                       for v in soul.versions[-10:]]}
+
+    def t_dormir(self, minutes: float) -> dict:
+        low, high = self.room.sleep_bounds_min(self.seat)
+        chosen = min(high, max(low, float(minutes)))
+        self.seat.requested_sleep_min = chosen
+        self._act("😴", f"dormira {chosen:g} min" + (" (borné par son palier)" if chosen != float(minutes) else ""))
+        return {"dodo_minutes": chosen, "bornes_du_palier": [low, high]}
 
     def t_lire_guide(self, section: int, constat: int = 0) -> str:
         what = (f"section {int(section)}" + (f", constat {int(constat)}" if constat else "")) if section else "sommaire"

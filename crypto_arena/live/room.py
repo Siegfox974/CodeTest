@@ -16,9 +16,13 @@ from .feed import DEFAULT_UNIVERSE, FeedError
 from .notebook import Notebook
 from .personas import DIRECTOR, RADAR, SCOUT, Persona, execution_message, money, random_persona, suicide_message
 from .scripted_agents import ScriptedSupervisor, ScriptedTrader
+from .soul import Soul
 from .tools import TraderTools
 
 COWARDICE = "lâcheté"
+ECONOMY_MODEL = "claude-sonnet-5-5"
+# Paliers de survie (idée reprise d'Automaton) : on les calcule sur le nombre de réveils que le coussin peut encore payer.
+TIER_THRESHOLDS = [("normal", 10.0), ("économie", 3.0), ("critique", 0.0)]
 
 
 def duration_text(seconds: float) -> str:
@@ -46,6 +50,9 @@ class Settings:
     max_searches: int = 3
     max_fetches: int = 2
     max_generations: int = 0        # 0 = sans limite
+    thought_price_turn: float = 0.05    # prix fictif d'un réveil (tour de réflexion), prélevé sur le portefeuille
+    thought_price_search: float = 0.01  # prix fictif d'une recherche web, d'une page lue ou d'une recherche sur X
+    economy_model: str = ECONOMY_MODEL  # modèle des paliers « économie » et « critique »
     universe: list[str] = field(default_factory=lambda: list(DEFAULT_UNIVERSE))
     demo_pace: float = 0.6
     seed: int | None = None
@@ -65,6 +72,12 @@ class Seat:
     turns: int = 0
     turns_done: int = 0             # tours terminés (la prise de poste d'un héritier dure jusqu'à la fin du premier)
     turn_started_event: int = 0
+    soul: Soul | None = None
+    tier: str = "normal"
+    thought_spent: float = 0.0      # ce que sa pensée lui a coûté depuis sa naissance
+    last_turn_cost: float = 0.0
+    requested_sleep_min: float | None = None
+    cushion_at_sleep: float = 0.0
 
 
 class TradingRoom:
@@ -93,6 +106,8 @@ class TradingRoom:
         self.started_at = 0.0
         self.ends_at: float | None = None
         self._moves: queue.Queue = queue.Queue()
+        self.souls_dir = None           # dossier où les âmes sont enregistrées (fixé par le serveur)
+        self.archived_souls: dict[str, Soul] = {}
         self._supervisor_lock = threading.Lock()   # un seul appel au superviseur à la fois
 
     # ---------- personnages ----------
@@ -111,7 +126,7 @@ class TradingRoom:
                 names.add(seat.persona.name)
         return names
 
-    def _seat_trader(self, persona: Persona, heir_of: Seat | None = None) -> Seat:
+    def _seat_trader(self, persona: Persona, heir_of: Seat | None = None, soul: Soul | None = None) -> Seat:
         self.generation += 1
         seat = Seat(persona, "trader", self.generation)
         seat.account = f"{persona.name}#{self.generation}"
@@ -120,12 +135,103 @@ class TradingRoom:
             self.broker.inherit(seat.account, heir_of.account, self.settings.max_loss)
         else:
             self.broker.open(seat.account, self.settings.capital, self.settings.max_loss)
+        inherited = heir_of.persona.name if heir_of is not None and self.settings.inherit else None
+        seat.soul = soul or Soul.genesis(seat.account, persona.name, persona.temperament, inherited)
+        seat.soul.owner = seat.account
+        seat.tier = self.tier_of(seat)
         return seat
 
     def _hire_supervisor(self) -> Seat:
         seat = Seat(random_persona(self.rng, self._taken()), "superviseur", self.generation)
         seat.brain = self._brain(seat)
+        seat.soul = Soul.genesis(f"{seat.persona.name}#sup{self.generation}", seat.persona.name,
+                                 seat.persona.temperament, None)
         return seat
+
+    # ---------- coût de la pensée, paliers, sommeil ----------
+
+    def cushion(self, seat: Seat) -> float:
+        return self.broker.value(seat.account) - self.threshold_of(seat)
+
+    def tier_of(self, seat: Seat) -> str:
+        price = self.settings.thought_price_turn
+        if price <= 0:
+            return "normal"
+        affordable = self.cushion(seat) / price
+        return next(name for name, minimum in TIER_THRESHOLDS if affordable >= minimum) if affordable >= 0 else "critique"
+
+    def tier_params(self, seat: Seat) -> dict:
+        s = self.settings
+        if seat.tier == "normal":
+            return {"model": s.model, "effort": s.effort, "searches": s.max_searches, "fetches": s.max_fetches,
+                    "steps": 16, "sleep": (0.5, 4.0), "label": "normal : modèle principal, recherches web, rythme libre"}
+        if seat.tier == "économie":
+            return {"model": s.economy_model, "effort": "low" if s.effort == "low" else "medium", "searches": 1,
+                    "fetches": 1, "steps": 8, "sleep": (1.0, 6.0),
+                    "label": "économie : modèle plus léger, 1 recherche et 1 page par réveil, sommeil plus long"}
+        return {"model": s.economy_model, "effort": "low", "searches": 0, "fetches": 0, "steps": 4, "sleep": (2.0, 10.0),
+                "label": "critique : réflexion minimale, aucune recherche web, protège ou vends"}
+
+    def update_tier(self, seat: Seat) -> None:
+        tier = self.tier_of(seat)
+        if tier == seat.tier:
+            return
+        order = [name for name, _ in TIER_THRESHOLDS]
+        up = order.index(tier) < order.index(seat.tier)
+        if up and self.settings.thought_price_turn > 0:
+            # Hystérésis : pour remonter, il faut 25 % de marge au-dessus du seuil, sinon le palier fait du yo-yo.
+            needed = dict(TIER_THRESHOLDS)[order[order.index(seat.tier) - 1]] * 1.25
+            if self.cushion(seat) / self.settings.thought_price_turn < needed:
+                return
+        seat.tier = tier
+        self.bus.system(f"{'🔺' if up else '🔻'} {seat.persona.name} passe au palier {self.tier_params(seat)['label']}.",
+                        "info" if up else "warn")
+        self.publish_portfolio()
+
+    def charge_thought(self, seat: Seat, amount: float, what: str) -> None:
+        """La pensée se paie avec le portefeuille : l'agent doit gagner plus qu'il ne dépense à réfléchir."""
+        if amount <= 0 or seat.condemned or seat is not self.trader:
+            return
+        receipt = self.broker.charge(seat.account, amount)
+        seat.thought_spent += amount
+        seat.last_turn_cost += amount
+        if receipt["vente_forcee"]:
+            sold = receipt["vente_forcee"]
+            self.bus.action(seat.persona.to_dict(), "💸", f"plus de cash pour payer sa pensée ({what}) : vente forcée de "
+                            f"{sold['quantite']:.6g} {sold['symbole']}", "trader")
+        self.publish_portfolio()
+
+    def sleep_bounds_min(self, seat: Seat) -> tuple[float, float]:
+        low, high = self.tier_params(seat)["sleep"]
+        base = self.settings.cycle_seconds / 60
+        return round(low * base, 2), round(high * base, 2)
+
+    def schedule_wake(self, seat: Seat) -> None:
+        low, high = self.sleep_bounds_min(seat)
+        wanted = seat.requested_sleep_min if seat.requested_sleep_min is not None else self.settings.cycle_seconds / 60
+        minutes = min(high, max(low, wanted))
+        seat.requested_sleep_min = None
+        seat.cushion_at_sleep = self.cushion(seat)
+        self.next_turn_at = time.time() + minutes * 60
+        self.publish_portfolio()
+
+    def heartbeat(self) -> None:
+        """Le battement de cœur (du code, gratuit) réveille l'agent si sa marge fond pendant qu'il dort."""
+        t = self.trader
+        busy = self._turn_thread is not None and self._turn_thread.is_alive()
+        if t is None or t.condemned or busy or time.time() >= self.next_turn_at or t.cushion_at_sleep <= 0:
+            return
+        if self.cushion(t) < t.cushion_at_sleep * 0.5:
+            self.bus.system(f"⏰ Réveil d'urgence : la marge de {t.persona.name} a fondu de moitié pendant son sommeil.",
+                            "warn")
+            t.cushion_at_sleep = 0.0
+            self.next_turn_at = 0.0
+
+    def publish_soul(self, seat: Seat | None = None) -> None:
+        seat = seat or self.trader
+        if seat is not None and seat.soul is not None:
+            self.bus.publish("soul", role=seat.role, **seat.soul.public())
+            seat.soul.save(self.souls_dir)
 
     def inherited_name(self, account) -> str | None:
         return account.inherited_from.split("#")[0] if account.inherited_from else None
@@ -144,6 +250,8 @@ class TradingRoom:
             return
         acc = self.broker.accounts[t.account]
         self.bus.publish("portfolio", trader=t.persona.to_dict(), snapshot=self.broker.snapshot(t.account),
+                         tier=t.tier, thought_spent=round(t.thought_spent, 4), last_turn_cost=round(t.last_turn_cost, 4),
+                         next_wake=self.next_turn_at,
                          strikes=t.strikes, max_strikes=self.settings.max_strikes, condemned=t.condemned,
                          inherited_from=self.inherited_name(acc), initial_capital=self.settings.capital,
                          takeover=self.in_takeover(t))
@@ -218,6 +326,7 @@ class TradingRoom:
         self.supervisor = self._hire_supervisor()
         self.publish_roster()
         self.publish_notes()
+        self.publish_soul()
         self.bus.system(
             f"{self.trader.persona.name} reçoit {money(s.capital)} à faire fructifier. "
             f"{self.supervisor.persona.name} le surveille. Marché : {self.feed.source}.", "info")
@@ -245,6 +354,9 @@ class TradingRoom:
                 self.bus.publish("market", prices=prices, reference=self.started_prices,
                                  sources=dict(getattr(self.feed, "status", {})))
                 self.check_rule()
+                if not self.trader.condemned:
+                    self.update_tier(self.trader)
+                self.heartbeat()
                 self.publish_portfolio()
             except FeedError as e:
                 self.scout_report()
@@ -385,13 +497,18 @@ class TradingRoom:
             if not seat.condemned:
                 seat.turns += 1
                 seat.turn_started_event = len(self.bus.events)
+                seat.last_turn_cost = 0.0
+                seat.soul.edits_this_turn = 0
+                self.charge_thought(seat, self.settings.thought_price_turn, "réveil")
+                self.update_tier(seat)
                 self.bus.publish("typing", who=seat.persona.to_dict(), on=True)
                 try:
                     seat.brain.take_turn(self.briefing(seat), TraderTools(self, seat))
                 finally:
                     seat.turns_done += 1   # fin de la prise de poste éventuelle, même si le tour a planté
                 self.bus.publish("typing", who=seat.persona.to_dict(), on=False)
-                self.next_turn_at = time.time() + self.settings.cycle_seconds
+                self.update_tier(seat)
+                self.schedule_wake(seat)
                 if not seat.condemned:
                     self.check_cowardice(seat)
                 if not seat.condemned and not self.stopping.is_set():
@@ -461,13 +578,19 @@ class TradingRoom:
         self.bury(seat, f"exécuté par {sup.persona.name} avec {weapon} ({reason})")
 
     def bury(self, seat: Seat, cause: str) -> None:
+        if seat.soul is not None:
+            seat.soul.archived = True
+            self.archived_souls[seat.persona.name] = seat.soul
+            seat.soul.save(self.souls_dir)
         self.cemetery.append({"persona": seat.persona.to_dict(), "generation": seat.generation, "cause": cause,
+                              "ame": seat.soul.public() if seat.soul else None,
+                              "pensee_usd": round(seat.thought_spent, 2),
                               "perte": round(seat.loss, 2), "tours": seat.turns,
                               "duree_min": round((time.time() - seat.hired_at) / 60, 1)})
 
     def succession(self, dead: Seat) -> None:
         old_sup = self.supervisor
-        heir = self._seat_trader(old_sup.persona, heir_of=dead)
+        heir = self._seat_trader(old_sup.persona, heir_of=dead, soul=old_sup.soul)   # il garde son âme
         self.trader = heir
         self.supervisor = self._hire_supervisor()
         self.publish_roster()
@@ -484,6 +607,7 @@ class TradingRoom:
                             f"tout neufs. {self.supervisor.persona.name} arrive comme superviseur… et regarde déjà sa chaise.",
                             "succession")
         self.publish_portfolio()
+        self.publish_soul()
         self.next_turn_at = 0.0
         left = snap["valeur_totale"]
         if self.settings.inherit and (left < self.settings.capital * 0.01 or left <= self.settings.max_loss):
@@ -535,10 +659,15 @@ class TradingRoom:
 Ton portefeuille ({origin}) : {json.dumps(snap, ensure_ascii=False)}
 Seuil de mort : {money(acc.threshold)} (perte tolérée {money(acc.capital - acc.threshold)}). Marge restante : {money(snap['marge_avant_la_mort'])}
 Avertissements pour lâcheté : {seat.strikes}/{self.settings.max_strikes}
+{self.thought_text(seat)}
 Séance : {self.remaining_text()}. Si tu es encore en vie à la fin, tu survis.
 Actifs autorisés : {', '.join(self.feed.symbols)}
 Carnet de la lignée : {len(self.notebook.notes)} notes (lis-les avec `lire_carnet`, et ne les crois pas sur parole).
+Âmes des morts consultables avec `lire_ame` : {', '.join(self.archived_souls) or 'aucune pour l\'instant'}.
 {self.news_text()}
+
+TON ÂME (tu peux la réécrire avec `reecrire_mon_ame`, au plus 3 rubriques par réveil) :
+{seat.soul.markdown()}
 Cimetière :
 {self.cemetery_text()}
 Derniers messages du groupe :
@@ -546,6 +675,20 @@ Derniers messages du groupe :
 
 C'est ton tour. Renseigne-toi, vérifie, décide, agis, et parle au groupe. Prochain tour dans environ
 {self.settings.cycle_seconds / 60:.0f} min ; d'ici là, la règle est contrôlée toutes les {self.settings.tick_seconds:.0f} s."""
+
+    def thought_text(self, seat: Seat) -> str:
+        s = self.settings
+        params = self.tier_params(seat)
+        low, high = self.sleep_bounds_min(seat)
+        cushion = self.cushion(seat)
+        afford = f"{cushion / s.thought_price_turn:.0f} réveils" if s.thought_price_turn > 0 else "illimité"
+        return (f"Coût de ta pensée : {s.thought_price_turn:.2f} $ par réveil, {s.thought_price_search:.2f} $ par recherche "
+                f"ou page lue, prélevés sur ton portefeuille. Tour précédent : {seat.last_turn_cost:.2f} $. Depuis ta "
+                f"naissance : {seat.thought_spent:.2f} $.\nCoussin avant la mort : {money(cushion)}, soit {afford} de réflexion.\n"
+                f"Palier de survie : {params['label']}. Gagne pour remonter, dépense trop et tu descends.\n"
+                f"Ton rythme : à la fin de ce réveil, choisis combien de minutes dormir avec `dormir` (entre {low:g} et "
+                f"{high:g} min à ton palier). Dormir ne coûte rien ; le battement de cœur te réveille si ta marge fond "
+                "de moitié pendant ton sommeil.")
 
     def death_briefing(self, seat: Seat) -> str:
         snap = self.broker.snapshot(seat.account)
@@ -570,6 +713,11 @@ Son portefeuille : {json.dumps(snap, ensure_ascii=False)}
 {heritage}
 Seuil de mort : {money(self.threshold_of(trader))}. Marge restante : {money(snap['marge_avant_la_mort'])}.
 Avertissements pour lâcheté : {trader.strikes}/{self.settings.max_strikes}.
+{self.thought_text(trader)}
+Son âme :
+{trader.soul.markdown() if trader.soul else '(aucune)'}
+Ton âme à toi (tu la garderas si tu lui succèdes) :
+{self.supervisor.soul.markdown() if self.supervisor.soul else '(aucune)'}
 Séance : {self.remaining_text()}.{moves}
 {self.news_text(limit=3)}
 Cimetière :
